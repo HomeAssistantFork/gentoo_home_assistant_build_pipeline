@@ -10,7 +10,9 @@ require_root
 log "Configuring bootloader and service ordering"
 run_in_chroot "
 set -euo pipefail
+set +u
 source /etc/profile
+set -u
 
 emerge --ask=n --noreplace sys-boot/grub
 if [[ -d /sys/firmware/efi ]]; then

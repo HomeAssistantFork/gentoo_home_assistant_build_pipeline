@@ -66,7 +66,7 @@ if errorlevel 1 (
 )
 
 echo [INFO] Running first-boot bootstrap as root...
-wsl -d Debian -u root -- bash -lc "set -euo pipefail; apt update; DEBIAN_FRONTEND=noninteractive apt -y full-upgrade; DEBIAN_FRONTEND=noninteractive apt -y install build-essential git curl jq ca-certificates gnupg lsb-release software-properties-common"
+wsl -d Debian -u root -- bash -lc "set -euo pipefail; apt update; DEBIAN_FRONTEND=noninteractive apt -y full-upgrade; DEBIAN_FRONTEND=noninteractive apt -y install build-essential git curl jq wget ca-certificates gnupg lsb-release debootstrap"
 if errorlevel 1 (
   echo [ERROR] Bootstrap package install failed.
   exit /b 1

@@ -11,26 +11,33 @@ GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/amd64/23.0/systemd}"
 TIMEZONE="${TIMEZONE:-UTC}"
 LOCALE="${LOCALE:-en_US.UTF-8 UTF-8}"
 HOSTNAME="${HOSTNAME_OVERRIDE:-ha-gentoo}"
+LANG_NAME="${LOCALE%% *}"
 
 log "Configuring portage and system profile inside chroot"
 run_in_chroot "
 set -euo pipefail
+set +u
 source /etc/profile
+set -u
 emerge-webrsync
-eselect profile set '${GENTOO_PROFILE}'
+if ! command -v eselect >/dev/null 2>&1; then
+	emerge --ask=n app-admin/eselect
+fi
+if command -v eselect >/dev/null 2>&1; then
+	eselect profile set '${GENTOO_PROFILE}' || true
+fi
 emerge --sync
 emerge --ask=n -uDN @world
 printf '%s\n' '${TIMEZONE}' > /etc/timezone
 emerge --config sys-libs/timezone-data
 printf '%s\n' '${LOCALE}' > /etc/locale.gen
 locale-gen
-locale_target="$(eselect locale list | awk '/en_US\.utf8/{gsub(/[[\]*]/,"",$1); print $1; exit}')"
-if [[ -n "$locale_target" ]]; then
-	eselect locale set "$locale_target"
-fi
-printf 'LANG=en_US.UTF-8\n' > /etc/env.d/02locale
-env-update && source /etc/profile
-printf 'hostname=${HOSTNAME}\n' > /etc/conf.d/hostname
+printf 'LANG=%s\n' '${LANG_NAME}' > /etc/env.d/02locale
+env-update
+set +u
+source /etc/profile
+set -u
+printf 'hostname=%s\n' '${HOSTNAME}' > /etc/conf.d/hostname
 "
 
 log "Enabling baseline services"

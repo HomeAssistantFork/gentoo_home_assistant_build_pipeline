@@ -10,7 +10,9 @@ require_root
 log "Installing container runtime and Supervisor host dependencies"
 run_in_chroot "
 set -euo pipefail
+set +u
 source /etc/profile
+set -u
 
 mkdir -p /etc/portage/package.accept_keywords
 cat >/etc/portage/package.accept_keywords/ha-supervisor <<'EOF'

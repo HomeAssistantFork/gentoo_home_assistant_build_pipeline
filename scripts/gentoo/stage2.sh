@@ -10,7 +10,8 @@ require_cmd tar
 
 STAGE3_TARBALL="${STAGE3_TARBALL:-}"
 if [[ -z "$STAGE3_TARBALL" ]]; then
-  die "Set STAGE3_TARBALL to a Gentoo stage3 tarball path."
+  log "STAGE3_TARBALL not set; fetching latest stage3 tarball"
+  STAGE3_TARBALL="$($SCRIPT_DIR/fetch_stage3.sh | tail -n1)"
 fi
 [[ -f "$STAGE3_TARBALL" ]] || die "Stage3 tarball not found: $STAGE3_TARBALL"
 
