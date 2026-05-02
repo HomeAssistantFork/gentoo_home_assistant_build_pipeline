@@ -1,0 +1,137 @@
+name: Build GentooHA
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Target platform"
+        required: true
+        default: x64
+        type: choice
+        options: [x64, pi3, pi4, pizero2, bbb, pbv2]
+      flavor:
+        description: "Build flavor"
+        required: true
+        default: live
+        type: choice
+        options: [live, installer]
+      start_stage:
+        description: "Start from stage (1-10)"
+        required: false
+        default: "1"
+      clean_state:
+        description: "Clean prior stage state"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+      flavor:
+        required: true
+        type: string
+      start_stage:
+        required: false
+        type: string
+        default: "1"
+      clean_state:
+        required: false
+        type: string
+        default: "false"
+
+env:
+  PLATFORM: ${{ inputs.platform }}
+  FLAVOR:   ${{ inputs.flavor }}
+  START_STAGE: ${{ inputs.start_stage || '1' }}
+  CLEAN_STATE: ${{ inputs.clean_state || 'false' }}
+
+jobs:
+  # ── Self-hosted runner (local Windows PC with WSL2) ──────────────────────────
+  build-self-hosted:
+    name: "Build ${{ inputs.platform }}-${{ inputs.flavor }} (self-hosted)"
+    runs-on: [self-hosted, linux, x64]
+    continue-on-error: true
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
+            bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Install QEMU binfmt (ARM only)
+        if: ${{ inputs.platform != 'x64' }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-user-static binfmt-support
+          sudo update-binfmts --enable qemu-arm || true
+          sudo update-binfmts --enable qemu-aarch64 || true
+
+      - name: Run build
+        run: |
+          sudo bash build.sh --non-interactive
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "gentooha-${{ inputs.platform }}-${{ inputs.flavor }}"
+          path: |
+            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── GitHub-hosted fallback (Linux, no WSL) ───────────────────────────────────
+  build-github-hosted:
+    name: "Build ${{ inputs.platform }}-${{ inputs.flavor }} (github-hosted)"
+    needs: build-self-hosted
+    if: ${{ failure() || needs.build-self-hosted.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
+            bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
+            dosfstools parted kpartx rsync \
+            qemu-user-static binfmt-support \
+            gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            debootstrap schroot
+          sudo update-binfmts --enable qemu-arm    || true
+          sudo update-binfmts --enable qemu-aarch64 || true
+
+      - name: Run build
+        run: |
+          sudo bash build.sh --non-interactive
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "gentooha-${{ inputs.platform }}-${{ inputs.flavor }}"
+          path: |
+            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
+          if-no-files-found: error
+          retention-days: 14

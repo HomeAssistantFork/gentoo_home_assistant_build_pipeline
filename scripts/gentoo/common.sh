@@ -4,6 +4,36 @@ set -Eeuo pipefail
 STATE_ROOT="${STATE_ROOT:-/var/lib/ha-gentoo-hybrid/state}"
 TARGET_ROOT="${TARGET_ROOT:-/mnt/gentoo}"
 
+# Build target platform and flavor
+# PLATFORM: x64 | pi3 | pi4 | pizero2 | bbb | pbv2
+# FLAVOR:   live | installer
+PLATFORM="${PLATFORM:-x64}"
+FLAVOR="${FLAVOR:-live}"
+
+case "$PLATFORM" in
+  x64)
+    ARCH="x86_64"
+    CROSS_COMPILE=""
+    ARTIFACT_EXT="iso"
+    ;;
+  pi3|bbb)
+    ARCH="arm"
+    CROSS_COMPILE="arm-linux-gnueabihf-"
+    ARTIFACT_EXT="img"
+    ;;
+  pi4|pizero2|pbv2)
+    ARCH="arm64"
+    CROSS_COMPILE="aarch64-linux-gnu-"
+    ARTIFACT_EXT="img"
+    ;;
+  *)
+    echo "ERROR: Unknown PLATFORM='$PLATFORM'. Valid: x64 pi3 pi4 pizero2 bbb pbv2" >&2
+    exit 1
+    ;;
+esac
+
+export PLATFORM FLAVOR ARCH CROSS_COMPILE ARTIFACT_EXT
+
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 warn() { log "WARN: $*"; }
 die() { log "ERROR: $*"; exit 1; }

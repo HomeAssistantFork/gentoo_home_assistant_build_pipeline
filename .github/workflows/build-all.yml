@@ -1,0 +1,33 @@
+name: Build All GentooHA Targets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'build.sh'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: "Flavor to build (or 'all')"
+        required: false
+        default: all
+        type: choice
+        options: [all, live, installer]
+
+jobs:
+  matrix:
+    name: "Build ${{ matrix.platform }}-${{ matrix.flavor }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, pi3, pi4, pizero2, bbb, pbv2]
+        flavor: ${{ fromJSON(inputs.flavor == 'live' && '["live"]' || inputs.flavor == 'installer' && '["installer"]' || '["live","installer"]') }}
+    uses: ./.github/workflows/build.yml
+    with:
+      platform: ${{ matrix.platform }}
+      flavor:   ${{ matrix.flavor }}
+      start_stage: "1"
+      clean_state: "false"
+    secrets: inherit

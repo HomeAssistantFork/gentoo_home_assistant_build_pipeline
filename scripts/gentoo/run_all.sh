@@ -2,10 +2,22 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
 
-for stage in stage1.sh stage2.sh stage3.sh stage4.sh stage5.sh stage6.sh stage7.sh stage8.sh; do
-  echo "==== Running ${stage} ===="
-  "$SCRIPT_DIR/$stage"
+START_STAGE="${START_STAGE:-1}"
+
+ALL_STAGES=(stage1 stage2 stage3 stage4 stage5 stage6 stage7 stage8 stage9 stage10)
+
+log "Build config: PLATFORM=$PLATFORM FLAVOR=$FLAVOR ARCH=$ARCH START_STAGE=$START_STAGE"
+
+for stage in "${ALL_STAGES[@]}"; do
+  stage_num="${stage#stage}"
+  if [[ "$stage_num" -lt "$START_STAGE" ]]; then
+    log "Skipping ${stage} (START_STAGE=$START_STAGE)"
+    continue
+  fi
+  echo "==== Running ${stage}.sh ===="
+  bash "$SCRIPT_DIR/${stage}.sh"
 done
 
-echo "All stages completed."
+log "All stages completed. PLATFORM=$PLATFORM FLAVOR=$FLAVOR artifact: gentooha-${PLATFORM}-${FLAVOR}.${ARTIFACT_EXT}"

@@ -6,6 +6,7 @@ This repository contains automation to:
 - Build a staged Gentoo host with systemd.
 - Prepare Home Assistant Supervisor compatibility checks.
 - Validate the final Home Assistant stack.
+- Produce a pure-VM live ISO artifact after staged build completion.
 
 ## Natural next step:
 
@@ -22,9 +23,12 @@ If you want, I can now do the second pass and harden stage6 specifically for a t
 - `scripts/windows/prereq_wsl_debian.cmd`
 - `scripts/repos/clone_home_assistant_org.sh`
 - `scripts/gentoo/run_all.sh`
-- `scripts/gentoo/stage1.sh` ... `scripts/gentoo/stage8.sh`
+- `scripts/gentoo/stage1.sh` ... `scripts/gentoo/stage10.sh`
 - `scripts/compat/preflight_ha_supervisor.sh`
 - `scripts/validation/validate_ha_stack.sh`
+- `scripts/validation/run_validation_bundle.sh`
+- `docs/pure_vm_iso_workflow.md`
+- `docs/arm64_delta_notes.md`
 - `plan.md`
 - `plan_manual.md`
 - `IMPLEMENTATION.md`
@@ -82,6 +86,8 @@ sudo bash scripts/gentoo/stage5.sh
 sudo bash scripts/gentoo/stage6.sh
 sudo bash scripts/gentoo/stage7.sh
 sudo bash scripts/gentoo/stage8.sh
+sudo bash scripts/gentoo/stage9.sh
+sudo bash scripts/gentoo/stage10.sh
 ```
 
 ### 4) Run Home Assistant compatibility preflight
@@ -103,6 +109,30 @@ For Node-RED add-on API checks, set:
 ```bash
 export SUPERVISOR_TOKEN="<your_token>"
 ```
+
+For report artifacts and pass/fail bundle output:
+
+```bash
+export KERNEL_TRACK=compat
+sudo bash scripts/validation/run_validation_bundle.sh
+```
+
+Repeat after booting the modern kernel track:
+
+```bash
+export KERNEL_TRACK=modern
+sudo bash scripts/validation/run_validation_bundle.sh
+```
+
+### 6) Pure VM ISO workflow
+
+See:
+
+- `docs/pure_vm_iso_workflow.md`
+
+ISO output path default:
+
+- `/var/lib/ha-gentoo-hybrid/artifacts/gentooha-live.iso`
 
 ## What To Commit
 
