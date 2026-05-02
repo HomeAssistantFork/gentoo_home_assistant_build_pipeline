@@ -1,0 +1,159 @@
+[submodule "repos/home-assistant/.github"]
+	path = repos/home-assistant/.github
+	url = https://github.com/home-assistant/.github.git
+[submodule "repos/home-assistant/actions"]
+	path = repos/home-assistant/actions
+	url = https://github.com/home-assistant/actions.git
+[submodule "repos/home-assistant/addons"]
+	path = repos/home-assistant/addons
+	url = https://github.com/HomeAssistantFork/addons.git
+	ignore = dirty
+[submodule "repos/home-assistant/addons-development"]
+	path = repos/home-assistant/addons-development
+	url = https://github.com/home-assistant/addons-development.git
+[submodule "repos/home-assistant/alerts.home-assistant.io"]
+	path = repos/home-assistant/alerts.home-assistant.io
+	url = https://github.com/home-assistant/alerts.home-assistant.io.git
+[submodule "repos/home-assistant/analytics.home-assistant.io"]
+	path = repos/home-assistant/analytics.home-assistant.io
+	url = https://github.com/home-assistant/analytics.home-assistant.io.git
+[submodule "repos/home-assistant/android"]
+	path = repos/home-assistant/android
+	url = https://github.com/HomeAssistantFork/android.git
+	ignore = dirty
+[submodule "repos/home-assistant/architecture"]
+	path = repos/home-assistant/architecture
+	url = https://github.com/home-assistant/architecture.git
+[submodule "repos/home-assistant/assets"]
+	path = repos/home-assistant/assets
+	url = https://github.com/home-assistant/assets.git
+[submodule "repos/home-assistant/brands"]
+	path = repos/home-assistant/brands
+	url = https://github.com/HomeAssistantFork/brands.git
+	ignore = dirty
+[submodule "repos/home-assistant/bthome.io"]
+	path = repos/home-assistant/bthome.io
+	url = https://github.com/home-assistant/bthome.io.git
+[submodule "repos/home-assistant/builder"]
+	path = repos/home-assistant/builder
+	url = https://github.com/home-assistant/builder.git
+[submodule "repos/home-assistant/buildroot"]
+	path = repos/home-assistant/buildroot
+	url = https://github.com/HomeAssistantFork/buildroot.git
+	ignore = dirty
+[submodule "repos/home-assistant/core"]
+	path = repos/home-assistant/core
+	url = https://github.com/home-assistant/core.git
+[submodule "repos/home-assistant/companion.home-assistant"]
+	path = repos/home-assistant/companion.home-assistant
+	url = https://github.com/home-assistant/companion.home-assistant.git
+[submodule "repos/home-assistant/creators.home-assistant.io"]
+	path = repos/home-assistant/creators.home-assistant.io
+	url = https://github.com/home-assistant/creators.home-assistant.io.git
+[submodule "repos/home-assistant/data.home-assistant"]
+	path = repos/home-assistant/data.home-assistant
+	url = https://github.com/home-assistant/data.home-assistant.git
+[submodule "repos/home-assistant/deployments"]
+	path = repos/home-assistant/deployments
+	url = https://github.com/home-assistant/deployments.git
+[submodule "repos/home-assistant/devcontainer"]
+	path = repos/home-assistant/devcontainer
+	url = https://github.com/home-assistant/devcontainer.git
+[submodule "repos/home-assistant/developers.home-assistant"]
+	path = repos/home-assistant/developers.home-assistant
+	url = https://github.com/home-assistant/developers.home-assistant.git
+[submodule "repos/home-assistant/devices"]
+	path = repos/home-assistant/devices
+	url = https://github.com/home-assistant/devices.git
+[submodule "repos/home-assistant/docker"]
+	path = repos/home-assistant/docker
+	url = https://github.com/home-assistant/docker.git
+[submodule "repos/home-assistant/docker-base"]
+	path = repos/home-assistant/docker-base
+	url = https://github.com/home-assistant/docker-base.git
+[submodule "repos/home-assistant/frontend"]
+	path = repos/home-assistant/frontend
+	url = https://github.com/home-assistant/frontend.git
+[submodule "repos/home-assistant/HAKit"]
+	path = repos/home-assistant/HAKit
+	url = https://github.com/home-assistant/HAKit.git
+[submodule "repos/home-assistant/hass-release"]
+	path = repos/home-assistant/hass-release
+	url = https://github.com/home-assistant/hass-release.git
+[submodule "repos/home-assistant/home-assistant-js-websocket"]
+	path = repos/home-assistant/home-assistant-js-websocket
+	url = https://github.com/home-assistant/home-assistant-js-websocket.git
+[submodule "repos/home-assistant/home-assistant.io"]
+	path = repos/home-assistant/home-assistant.io
+	url = https://github.com/home-assistant/home-assistant.io.git
+[submodule "repos/home-assistant/iOS"]
+	path = repos/home-assistant/iOS
+	url = https://github.com/home-assistant/iOS.git
+[submodule "repos/home-assistant/login.home-assistant.io"]
+	path = repos/home-assistant/login.home-assistant.io
+	url = https://github.com/home-assistant/login.home-assistant.io.git
+[submodule "repos/home-assistant/mobile-apps-fcm-push"]
+	path = repos/home-assistant/mobile-apps-fcm-push
+	url = https://github.com/home-assistant/mobile-apps-fcm-push.git
+[submodule "repos/home-assistant/my.home-assistant.io"]
+	path = repos/home-assistant/my.home-assistant.io
+	url = https://github.com/home-assistant/my.home-assistant.io.git
+[submodule "repos/home-assistant/operating-system"]
+	path = repos/home-assistant/operating-system
+	url = https://github.com/HomeAssistantFork/operating-system.git
+	ignore = dirty
+[submodule "repos/home-assistant/operating-system-blobs"]
+	path = repos/home-assistant/operating-system-blobs
+	url = https://github.com/home-assistant/operating-system-blobs.git
+[submodule "repos/home-assistant/operating-system-full-images"]
+	path = repos/home-assistant/operating-system-full-images
+	url = https://github.com/home-assistant/operating-system-full-images.git
+[submodule "repos/home-assistant/os-agent"]
+	path = repos/home-assistant/os-agent
+	url = https://github.com/home-assistant/os-agent.git
+[submodule "repos/home-assistant/plugin-audio"]
+	path = repos/home-assistant/plugin-audio
+	url = https://github.com/home-assistant/plugin-audio.git
+[submodule "repos/home-assistant/plugin-cli"]
+	path = repos/home-assistant/plugin-cli
+	url = https://github.com/home-assistant/plugin-cli.git
+[submodule "repos/home-assistant/plugin-dns"]
+	path = repos/home-assistant/plugin-dns
+	url = https://github.com/home-assistant/plugin-dns.git
+[submodule "repos/home-assistant/plugin-multicast"]
+	path = repos/home-assistant/plugin-multicast
+	url = https://github.com/home-assistant/plugin-multicast.git
+[submodule "repos/home-assistant/plugin-observer"]
+	path = repos/home-assistant/plugin-observer
+	url = https://github.com/home-assistant/plugin-observer.git
+[submodule "repos/home-assistant/service-hub"]
+	path = repos/home-assistant/service-hub
+	url = https://github.com/home-assistant/service-hub.git
+[submodule "repos/home-assistant/services.home-assistant.io"]
+	path = repos/home-assistant/services.home-assistant.io
+	url = https://github.com/home-assistant/services.home-assistant.io.git
+[submodule "repos/home-assistant/stun"]
+	path = repos/home-assistant/stun
+	url = https://github.com/home-assistant/stun.git
+[submodule "repos/home-assistant/supervised-installer"]
+	path = repos/home-assistant/supervised-installer
+	url = https://github.com/home-assistant/supervised-installer.git
+[submodule "repos/home-assistant/supervisor"]
+	path = repos/home-assistant/supervisor
+	url = https://github.com/home-assistant/supervisor.git
+[submodule "repos/home-assistant/tempio"]
+	path = repos/home-assistant/tempio
+	url = https://github.com/home-assistant/tempio.git
+[submodule "repos/home-assistant/version"]
+	path = repos/home-assistant/version
+	url = https://github.com/HomeAssistantFork/version.git
+	ignore = dirty
+[submodule "repos/home-assistant/wheels"]
+	path = repos/home-assistant/wheels
+	url = https://github.com/home-assistant/wheels.git
+[submodule "repos/home-assistant/wheels-custom-integrations"]
+	path = repos/home-assistant/wheels-custom-integrations
+	url = https://github.com/home-assistant/wheels-custom-integrations.git
+[submodule "repos/home-assistant/cli"]
+	path = repos/home-assistant/cli
+	url = https://github.com/home-assistant/cli.git
