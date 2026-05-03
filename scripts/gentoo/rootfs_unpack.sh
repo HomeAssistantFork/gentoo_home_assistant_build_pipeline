@@ -30,4 +30,17 @@ tar \
 log "Mounting chroot virtual filesystems"
 mount_chroot_fs
 
+# Report (and republish as a sidecar) the highest completed stage that was
+# packed into this rootfs so CI steps can read it without entering the chroot.
+_META="$(dirname "$PACK_IN")/rootfs_meta.txt"
+if [[ -f "$STATE_ROOT/completed_stage" ]]; then
+  _COMPLETED_STAGE="$(cat "$STATE_ROOT/completed_stage")"
+  log "Restored rootfs with completed_stage=$_COMPLETED_STAGE"
+  printf 'COMPLETED_STAGE=%s\n' "$_COMPLETED_STAGE" > "$_META"
+else
+  log "No completed_stage marker in rootfs; starting from stage 1"
+  rm -f "$_META"
+fi
+unset _META _COMPLETED_STAGE
+
 log "Unpack complete: $TARGET_ROOT"

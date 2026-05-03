@@ -89,18 +89,21 @@ jobs:
 
       - name: Run stages 1-2 (bootstrap)
         env:
-          START_STAGE: "1"
           END_STAGE: "2"
         run: sudo -E bash build.sh --non-interactive
 
       - name: Pack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Upload rootfs micro-artifact
+      # Artifact name encodes the highest completed stage (stage2) so any
+      # consumer knows exactly what work has been done without unpacking.
+      - name: Upload rootfs artifact (stage 2)
         uses: actions/upload-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-bootstrap
-          path: ${{ env.ROOTFS_PATH }}
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage2
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
           retention-days: 1
           if-no-files-found: error
 
@@ -116,10 +119,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download bootstrap rootfs
+      - name: Download stage-2 rootfs
         uses: actions/download-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-bootstrap
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage2
           path: /tmp
 
       - name: Install host prerequisites (QEMU for ARM)
@@ -135,20 +138,23 @@ jobs:
       - name: Unpack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
 
+      # START_STAGE is intentionally omitted: run_all.sh reads the completed_stage
+      # manifest embedded in the rootfs and auto-advances past finished stages.
       - name: Run stages 3-5 (base system)
         env:
-          START_STAGE: "3"
           END_STAGE: "5"
         run: sudo -E bash build.sh --non-interactive
 
       - name: Pack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Upload rootfs micro-artifact
+      - name: Upload rootfs artifact (stage 5)
         uses: actions/upload-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-base
-          path: ${{ env.ROOTFS_PATH }}
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage5
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
           retention-days: 1
           if-no-files-found: error
 
@@ -169,10 +175,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download base-system rootfs
+      - name: Download stage-5 rootfs
         uses: actions/download-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-base
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage5
           path: /tmp
 
       - name: Install host prerequisites
@@ -200,7 +206,6 @@ jobs:
 
       - name: Run stage 6 (kernel build)
         env:
-          START_STAGE: "6"
           END_STAGE: "6"
           CCACHE_HOST_DIR: /tmp/ha-ccache-${{ inputs.platform }}
         run: sudo -E bash build.sh --non-interactive
@@ -211,12 +216,14 @@ jobs:
         if: always()
         run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}" --no-clean-src
 
-      - name: Upload rootfs micro-artifact (always)
+      - name: Upload rootfs artifact (stage 6, always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-kernel
-          path: ${{ env.ROOTFS_PATH }}
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage6
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
           retention-days: 1
           overwrite: true
           if-no-files-found: error
@@ -233,10 +240,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download kernel rootfs
+      - name: Download stage-6 rootfs
         uses: actions/download-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-kernel
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage6
           path: /tmp
 
       - name: Install host prerequisites
@@ -254,18 +261,19 @@ jobs:
 
       - name: Run stages 7-9 (HA install)
         env:
-          START_STAGE: "7"
           END_STAGE: "9"
         run: sudo -E bash build.sh --non-interactive
 
       - name: Pack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Upload rootfs micro-artifact
+      - name: Upload rootfs artifact (stage 9)
         uses: actions/upload-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-hainstall
-          path: ${{ env.ROOTFS_PATH }}
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage9
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
           retention-days: 1
           if-no-files-found: error
 
@@ -281,10 +289,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download ha-install rootfs
+      - name: Download stage-9 rootfs
         uses: actions/download-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-hainstall
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage9
           path: /tmp
 
       - name: Install host prerequisites
@@ -307,7 +315,6 @@ jobs:
 
       - name: Run stage 10 (artifact generation)
         env:
-          START_STAGE: "10"
           END_STAGE: "10"
           ARTIFACT_DIR: ${{ env.ARTIFACT_DIR }}
         run: sudo -E bash build.sh --non-interactive

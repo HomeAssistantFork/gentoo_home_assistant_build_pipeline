@@ -45,6 +45,20 @@ fi
 log "Packing $TARGET_ROOT → $PACK_OUT"
 mkdir -p "$(dirname "$PACK_OUT")"
 
+# Embed the highest completed stage into a sidecar file next to the tarball
+# so any consumer (CI step, next job) can discover the stage without unpacking.
+# The sidecar always lives in the same directory as PACK_OUT (default: /tmp).
+_META="$(dirname "$PACK_OUT")/rootfs_meta.txt"
+if [[ -f "$STATE_ROOT/completed_stage" ]]; then
+  _COMPLETED_STAGE="$(cat "$STATE_ROOT/completed_stage")"
+  log "Embedding completed_stage=$_COMPLETED_STAGE in $PACK_OUT"
+  printf 'COMPLETED_STAGE=%s\n' "$_COMPLETED_STAGE" > "$_META"
+else
+  log "No completed_stage marker found; rootfs_meta.txt will be absent"
+  rm -f "$_META"
+fi
+unset _META _COMPLETED_STAGE
+
 tar \
   --use-compress-program='zstd -T0 -3' \
   --exclude="${TARGET_ROOT}/proc" \

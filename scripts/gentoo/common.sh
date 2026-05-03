@@ -75,6 +75,13 @@ stage_start() {
 stage_end() {
   local stage="$1"
   mark_done "$stage"
+  # Track the highest completed stage so the next job's rootfs can auto-skip.
+  local num="${stage#stage}"
+  local prev=0
+  [[ -f "$STATE_ROOT/completed_stage" ]] && prev="$(cat "$STATE_ROOT/completed_stage")"
+  if [[ "$num" -gt "$prev" ]]; then
+    echo "$num" > "$STATE_ROOT/completed_stage"
+  fi
   log "Completed ${stage}"
 }
 
