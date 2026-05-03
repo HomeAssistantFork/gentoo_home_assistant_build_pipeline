@@ -30,12 +30,26 @@ case "$_OS" in
       _ENV="linux"
     fi
     ;;
+  Darwin*|FreeBSD*|OpenBSD*|NetBSD*)
+    _ENV="unsupported-unix"
+    ;;
   *)
     _ENV="unknown"
     ;;
 esac
 
 echo "[build.sh] Environment: $_ENV ($(uname -sr 2>/dev/null || echo ?))"
+
+# Build stages require a Linux environment.  Give a clear early exit on
+# platforms where the Linux-only tooling (chroot, mount --rbind, etc.) is
+# unavailable.  WSL guidance is only printed on Windows.
+if [[ "$_ENV" == "unsupported-unix" || "$_ENV" == "unknown" ]]; then
+  echo ""
+  echo "ERROR: Build stages require a Linux environment."
+  echo "       Run this script on native Linux, inside a Linux VM,"
+  echo "       or inside a WSL2 distro on Windows."
+  exit 1
+fi
 
 VALID_PLATFORMS=(x64 pi3 pi4 pizero2 bbb pbv2)
 VALID_FLAVORS=(live installer)
@@ -132,6 +146,7 @@ if [[ "$_ENV" == "windows-bash" ]]; then
   # Convert the current Windows path to a WSL mount path
   WSL_PATH="$(wsl wslpath "$(pwd -W)" 2>/dev/null || true)"
   if [[ -z "$WSL_PATH" ]]; then
+    echo "[build.sh] wsl wslpath failed; using manual path conversion"
     # Fallback: manual conversion (e.g. C:\foo -> /mnt/c/foo)
     WSL_PATH="$(echo "$SCRIPT_DIR" | sed 's|^\([A-Za-z]\):|/mnt/\L\1|; s|\\|/|g')"
   fi
