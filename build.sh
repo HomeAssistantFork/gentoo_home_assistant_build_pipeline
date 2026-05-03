@@ -1,22 +1,41 @@
 #!/usr/bin/env bash
-# GentooHA local build launcher
+# GentooHA build launcher
 # Usage: bash build.sh [--non-interactive]
 #
-# This script runs entirely inside the current Linux environment.
-# It works on native Linux, inside a WSL2 distro, or inside a CI runner.
-# No WSL is installed or required when running natively on Linux.
+# Supports three execution environments:
+#   1. Native Linux (CI runner, bare metal, VM) — runs build stages directly.
+#   2. WSL2 distro (GentooHA or Debian)         — runs build stages directly.
+#   3. Git Bash / MSYS2 / Cygwin on Windows     — delegates to a WSL2 distro.
+#
+# When run from Git Bash, interactive prompts still work as normal; after
+# gathering parameters the script hands off to WSL with --non-interactive.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NON_INTERACTIVE=false
 for arg in "$@"; do [[ "$arg" == "--non-interactive" ]] && NON_INTERACTIVE=true; done
 
-# Detect execution environment and log it so the operator knows where stages will run.
-if grep -qsi microsoft /proc/version 2>/dev/null; then
-  echo "[build.sh] Environment: WSL2 ($(uname -r))"
-elif [[ -f /proc/version ]]; then
-  echo "[build.sh] Environment: native Linux ($(uname -r))"
-fi
+# ---------------------------------------------------------------------------
+# Detect execution environment
+# ---------------------------------------------------------------------------
+_OS="$(uname -s 2>/dev/null || echo unknown)"
+case "$_OS" in
+  MINGW*|MSYS*|CYGWIN*)
+    _ENV="windows-bash"
+    ;;
+  Linux*)
+    if grep -qsi microsoft /proc/version 2>/dev/null; then
+      _ENV="wsl"
+    else
+      _ENV="linux"
+    fi
+    ;;
+  *)
+    _ENV="unknown"
+    ;;
+esac
+
+echo "[build.sh] Environment: $_ENV ($(uname -sr 2>/dev/null || echo ?))"
 
 VALID_PLATFORMS=(x64 pi3 pi4 pizero2 bbb pbv2)
 VALID_FLAVORS=(live installer)
@@ -90,7 +109,41 @@ fi
 
 export PLATFORM FLAVOR START_STAGE CLEAN_STATE
 
-# Clean state files if requested
+# ---------------------------------------------------------------------------
+# Windows (Git Bash / MSYS2 / Cygwin): delegate build stages to WSL
+# ---------------------------------------------------------------------------
+if [[ "$_ENV" == "windows-bash" ]]; then
+  echo "[build.sh] Windows detected — build stages require Linux. Delegating to WSL..."
+
+  # Find a suitable WSL distro (prefer GentooHA, fall back to Debian)
+  WSL_DISTRO=""
+  if wsl -d GentooHA -- echo ok >/dev/null 2>&1; then
+    WSL_DISTRO="GentooHA"
+  elif wsl -d Debian -- echo ok >/dev/null 2>&1; then
+    WSL_DISTRO="Debian"
+  fi
+  if [[ -z "$WSL_DISTRO" ]]; then
+    echo "ERROR: No suitable WSL distro found (need GentooHA or Debian)."
+    echo "       Run scripts/windows/prereq_wsl_debian.cmd first."
+    exit 1
+  fi
+  echo "[build.sh] Using WSL distro: $WSL_DISTRO"
+
+  # Convert the current Windows path to a WSL mount path
+  WSL_PATH="$(wsl wslpath "$(pwd -W)" 2>/dev/null || true)"
+  if [[ -z "$WSL_PATH" ]]; then
+    # Fallback: manual conversion (e.g. C:\foo -> /mnt/c/foo)
+    WSL_PATH="$(echo "$SCRIPT_DIR" | sed 's|^\([A-Za-z]\):|/mnt/\L\1|; s|\\|/|g')"
+  fi
+
+  wsl -d "$WSL_DISTRO" -- bash -c \
+    "export PLATFORM='$PLATFORM' FLAVOR='$FLAVOR' START_STAGE='$START_STAGE' CLEAN_STATE='$CLEAN_STATE'; cd '$WSL_PATH' && bash build.sh --non-interactive"
+  exit $?
+fi
+
+# ---------------------------------------------------------------------------
+# Linux (native or WSL): run build stages directly
+# ---------------------------------------------------------------------------
 if [[ "$CLEAN_STATE" == "true" ]]; then
   STATE_ROOT="${STATE_ROOT:-/var/lib/ha-gentoo-hybrid/state}"
   echo "Cleaning stage state files in $STATE_ROOT ..."

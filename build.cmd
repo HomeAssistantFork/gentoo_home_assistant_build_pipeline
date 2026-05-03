@@ -1,6 +1,22 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 
+:: ---------------------------------------------------------------------------
+:: Environment detection
+:: Build stages require Linux.  On Windows we use a WSL2 distro.
+:: Verify WSL is available before spending time on prompts.
+:: ---------------------------------------------------------------------------
+where wsl >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+  echo ERROR: WSL is not installed or not in PATH.
+  echo        Install WSL2 first, then run scripts\windows\prereq_wsl_debian.cmd
+  echo        to set up a build environment inside WSL.
+  pause
+  exit /b 1
+)
+echo [build.cmd] Environment: Windows (WSL2 available)
+echo.
+
 echo ============================================================
 echo  GentooHA Build Launcher
 echo ============================================================
