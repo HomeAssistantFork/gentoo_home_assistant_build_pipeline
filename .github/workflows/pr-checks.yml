@@ -1,0 +1,100 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Shell-script syntax validation ──────────────────────────────────────────
+  validate-scripts:
+    name: Validate Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Shell script syntax check
+        run: |
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+          bash -n build.sh
+          bash -n configure.sh
+
+  # ── Artifact build smoke-test (x64-live) ────────────────────────────────────
+  # This job mirrors build.yml but is scoped to x64-live as a PR gate.
+  # It will be expanded once the full validation suite is implemented.
+  artifact-smoke-test:
+    name: Artifact Smoke Test (x64-live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
+            bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
+            dosfstools parted kpartx rsync \
+            debootstrap schroot
+
+      - name: Run build
+        env:
+          PLATFORM: x64
+          FLAVOR: live
+          START_STAGE: "1"
+          CLEAN_STATE: "false"
+        run: |
+          sudo bash build.sh --non-interactive
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-x64-live
+          path: /var/lib/ha-gentoo-hybrid/artifacts/gentooha-x64-live.*
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Aggregating gate ─────────────────────────────────────────────────────────
+  # Configure this job's name ("PR Gate") as the required check in
+  # Settings → Branches → Branch protection rules for `main`.
+  # Run `.github/workflows/setup-branch-protection.yml` once to automate that.
+  pr-gate:
+    name: PR Gate
+    needs: [validate-scripts, artifact-smoke-test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate required checks
+        run: |
+          validate="${{ needs.validate-scripts.result }}"
+          smoke="${{ needs.artifact-smoke-test.result }}"
+
+          echo "validate-scripts   : $validate"
+          echo "artifact-smoke-test: $smoke"
+
+          if [[ "$validate" != "success" ]]; then
+            echo "::error::validate-scripts failed"
+            exit 1
+          fi
+
+          if [[ "$smoke" != "success" ]]; then
+            echo "::error::artifact-smoke-test failed"
+            exit 1
+          fi
+
+          echo "All PR checks passed — merge is permitted"
