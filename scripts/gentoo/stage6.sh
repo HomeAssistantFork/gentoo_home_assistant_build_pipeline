@@ -22,22 +22,35 @@ if [[ -n "${CROSS_COMPILE:-}" ]] && command -v apt-get >/dev/null 2>&1; then
   apt-get install -y -q qemu-user-static binfmt-support || true
 fi
 
+# Set up ccache directory on host (bind-mounted into chroot at /tmp/ccache).
+# The directory persists across re-runs via the GitHub Actions cache, giving
+# incremental compilation speeds even when kernel source is fully re-checked out.
+CCACHE_HOST_DIR="${CCACHE_HOST_DIR:-/tmp/ha-ccache-${PLATFORM:-unknown}}"
+mkdir -p "$CCACHE_HOST_DIR" "$TARGET_ROOT/tmp/ccache"
+if ! mountpoint -q "$TARGET_ROOT/tmp/ccache" 2>/dev/null; then
+  mount --bind "$CCACHE_HOST_DIR" "$TARGET_ROOT/tmp/ccache"
+fi
+
 # Platform-specific kernel defconfig
 case "${PLATFORM:-x64}" in
-  x64)    PLATFORM_DEFCONFIG="defconfig" ;;
-  pi3)    PLATFORM_DEFCONFIG="bcm2709_defconfig" ;;
-  pi4)    PLATFORM_DEFCONFIG="bcm2711_defconfig" ;;
+  x64)     PLATFORM_DEFCONFIG="defconfig" ;;
+  pi3)     PLATFORM_DEFCONFIG="bcm2709_defconfig" ;;
+  pi4)     PLATFORM_DEFCONFIG="bcm2711_defconfig" ;;
   pizero2) PLATFORM_DEFCONFIG="bcm2835_defconfig" ;;
-  bbb)    PLATFORM_DEFCONFIG="omap2plus_defconfig" ;;
-  pbv2)   PLATFORM_DEFCONFIG="defconfig" ;; # AM62x — use generic arm64 defconfig until TI config available
-  *)      PLATFORM_DEFCONFIG="defconfig" ;;
+  bbb)     PLATFORM_DEFCONFIG="omap2plus_defconfig" ;;
+  pbv2)    PLATFORM_DEFCONFIG="defconfig" ;; # AM62x — use generic arm64 defconfig until TI config available
+  *)       PLATFORM_DEFCONFIG="defconfig" ;;
 esac
 
-# Pass ARCH/CROSS_COMPILE into chroot environment
 CHROOT_ARCH="${ARCH:-x86_64}"
 CHROOT_CROSS="${CROSS_COMPILE:-}"
 
 log "Building dual kernel tracks (compat + modern) for PLATFORM=${PLATFORM:-x64} ARCH=$CHROOT_ARCH"
+
+# The chroot script uses per-sub-step checkpoints stored in /var/lib/ha-build-state/
+# inside the chroot.  Because this directory lives inside TARGET_ROOT it survives
+# the rootfs_pack -> rootfs_unpack cycle, so a timed-out kernel job can be re-run
+# and will skip already-completed sub-steps (config, build, install).
 chroot_script="$(cat <<EOF
 set -euo pipefail
 set +u
@@ -47,14 +60,37 @@ set -u
 export ARCH="${CHROOT_ARCH}"
 export CROSS_COMPILE="${CHROOT_CROSS}"
 
-emerge --ask=n --noreplace sys-kernel/gentoo-sources sys-kernel/installkernel
+# ── ccache setup (best-effort) ──────────────────────────────────────────────
+if command -v ccache >/dev/null 2>&1; then
+  export CCACHE_DIR=/tmp/ccache
+  export CC="ccache \${CROSS_COMPILE}gcc"
+  echo "ccache enabled (CCACHE_DIR=\$CCACHE_DIR)"
+else
+  emerge --ask=n --noreplace dev-util/ccache 2>/dev/null && {
+    export CCACHE_DIR=/tmp/ccache
+    export CC="ccache \${CROSS_COMPILE}gcc"
+    echo "ccache installed and enabled"
+  } || echo "ccache unavailable; building without it"
+fi
 
-kernel_src_dir="\$(find /usr/src -maxdepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
+# ── Resumable sub-step checkpoint helpers ───────────────────────────────────
+CKPT_DIR="/var/lib/ha-build-state"
+mkdir -p "\$CKPT_DIR"
+is_ckpt()   { [[ -f "\$CKPT_DIR/\$1" ]]; }
+mark_ckpt() { date -u +%Y-%m-%dT%H:%M:%SZ > "\$CKPT_DIR/\$1"; echo "  checkpoint: \$1"; }
+
+# ── Kernel sources ───────────────────────────────────────────────────────────
+if ! is_ckpt stage6_sources; then
+  emerge --ask=n --noreplace sys-kernel/gentoo-sources sys-kernel/installkernel
+  mark_ckpt stage6_sources
+fi
+
+kernel_src_dir="\$(find /usr/src -maxdepth 1 -type d -name 'linux-*' | sort -V | tail -n1)"
 [[ -n "\$kernel_src_dir" ]] || { echo 'No installed kernel sources found' >&2; exit 1; }
 ln -sfn "\$kernel_src_dir" /usr/src/linux
 cd /usr/src/linux
 
-# Shared helper: apply all Docker/Supervisor required kernel options.
+# ── Shared kernel option helper ──────────────────────────────────────────────
 apply_ha_kernel_options() {
   # Overlay filesystem (containers, add-on layers)
   ./scripts/config --module CONFIG_OVERLAY_FS
@@ -139,27 +175,54 @@ apply_ha_kernel_options() {
   ./scripts/config --enable CONFIG_AUDIT_TREE
 }
 
-# Compatibility track: conservative defaults for containerized Supervisor workload.
-make mrproper
-make ${PLATFORM_DEFCONFIG}
-apply_ha_kernel_options
-make olddefconfig
-make -j\$(nproc) LOCALVERSION="-${KERNEL_COMPAT_LABEL}"
-make modules_install
-make install
-cp .config /boot/config-${KERNEL_COMPAT_LABEL}
+# ── Compat kernel track ──────────────────────────────────────────────────────
+if ! is_ckpt stage6_compat_config; then
+  make mrproper
+  make ${PLATFORM_DEFCONFIG}
+  apply_ha_kernel_options
+  make olddefconfig
+  mark_ckpt stage6_compat_config
+fi
 
-# Modern track: start from the compatibility config but keep a distinct kernel label.
-make mrproper
-cp /boot/config-${KERNEL_COMPAT_LABEL} .config
-make olddefconfig
-make -j\$(nproc) LOCALVERSION="-${KERNEL_MODERN_LABEL}"
-make modules_install
-make install
-cp .config /boot/config-${KERNEL_MODERN_LABEL}
+if ! is_ckpt stage6_compat_build; then
+  make -j\$(nproc) LOCALVERSION="-${KERNEL_COMPAT_LABEL}"
+  mark_ckpt stage6_compat_build
+fi
+
+if ! is_ckpt stage6_compat_install; then
+  make modules_install
+  make install
+  cp .config /boot/config-${KERNEL_COMPAT_LABEL}
+  mark_ckpt stage6_compat_install
+fi
+
+# ── Modern kernel track ──────────────────────────────────────────────────────
+if ! is_ckpt stage6_modern_config; then
+  make mrproper
+  cp /boot/config-${KERNEL_COMPAT_LABEL} .config
+  make olddefconfig
+  mark_ckpt stage6_modern_config
+fi
+
+if ! is_ckpt stage6_modern_build; then
+  make -j\$(nproc) LOCALVERSION="-${KERNEL_MODERN_LABEL}"
+  mark_ckpt stage6_modern_build
+fi
+
+if ! is_ckpt stage6_modern_install; then
+  make modules_install
+  make install
+  cp .config /boot/config-${KERNEL_MODERN_LABEL}
+  mark_ckpt stage6_modern_install
+fi
+
+echo "Dual kernel build complete."
 EOF
 )"
 
 run_in_chroot "$chroot_script"
+
+# Unmount ccache bind-mount before leaving stage6
+umount "$TARGET_ROOT/tmp/ccache" 2>/dev/null || true
 
 stage_end stage6

@@ -16,6 +16,11 @@ on:
         type: choice
         options: [all, live, installer]
 
+# Minimal token permissions — read repo content + pass artifact/cache access to child workflow.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   matrix:
     name: "Build ${{ matrix.platform }}-${{ matrix.flavor }}"
@@ -28,6 +33,4 @@ jobs:
     with:
       platform: ${{ matrix.platform }}
       flavor:   ${{ matrix.flavor }}
-      start_stage: "1"
-      clean_state: "false"
     secrets: inherit

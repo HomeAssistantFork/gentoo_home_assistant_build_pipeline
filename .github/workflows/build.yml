@@ -1,3 +1,28 @@
+# GentooHA build pipeline — produces a .iso (x64) or .img (ARM) artifact.
+#
+# The build is split into five sequential jobs so that long-running steps
+# (especially the kernel compilation in job 3) can be resumed after a timeout
+# without restarting from scratch:
+#
+#  Job 1 – bootstrap   : stages 1-2  (Gentoo stage3 extraction)         ~30 min
+#  Job 2 – base-system : stages 3-5  (portage world update + HA prereqs) ~3 h
+#  Job 3 – kernel      : stage  6    (dual kernel build, with ccache)     ~4-6 h
+#  Job 4 – ha-install  : stages 7-9  (grub, Supervisor, AppArmor)         ~2 h
+#  Job 5 – pack        : stage  10   (produce final .iso / .img)          ~30 min
+#
+# Resume strategy
+# ───────────────
+# Each job (2-5) downloads the rootfs tarball produced by the previous job,
+# unpacks it, runs its stages, then re-packs and uploads a new rootfs artifact.
+# Checkpoint marker files inside the chroot (/var/lib/ha-build-state/) survive
+# the pack/unpack cycle, so within a job individual sub-steps are not repeated.
+#
+# If the kernel job times out, click "Re-run failed jobs" in the GitHub UI.
+# The re-run downloads the base-system rootfs (still available in the same
+# workflow run), restores it, and continues from the last kernel checkpoint.
+# ccache is restored from GitHub Actions cache across runs, so the compiler
+# cache survives even if a new workflow run is started.
+
 name: Build GentooHA
 
 on:
@@ -15,16 +40,6 @@ on:
         default: live
         type: choice
         options: [live, installer]
-      start_stage:
-        description: "Start from stage (1-10)"
-        required: false
-        default: "1"
-      clean_state:
-        description: "Clean prior stage state"
-        required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
 
   workflow_call:
     inputs:
@@ -34,27 +49,183 @@ on:
       flavor:
         required: true
         type: string
-      start_stage:
-        required: false
-        type: string
-        default: "1"
-      clean_state:
-        required: false
-        type: string
-        default: "false"
 
+# Minimal token permissions — checkout (read) and artifact upload/download (write).
+permissions:
+  contents: read
+  actions: write
+
+# ── Shared environment ────────────────────────────────────────────────────────
 env:
-  PLATFORM: ${{ inputs.platform }}
-  FLAVOR:   ${{ inputs.flavor }}
-  START_STAGE: ${{ inputs.start_stage || '1' }}
-  CLEAN_STATE: ${{ inputs.clean_state || 'false' }}
+  PLATFORM:      ${{ inputs.platform }}
+  FLAVOR:        ${{ inputs.flavor }}
+  TARGET_ROOT:   /mnt/gentoo
+  # STATE_ROOT inside TARGET_ROOT so checkpoint files survive pack/unpack.
+  STATE_ROOT:    /mnt/gentoo/.ha-build-state
+  ARTIFACT_DIR:  /mnt/gentoo-artifacts
+  # ROOTFS_PATH is the single authoritative location used by rootfs_pack.sh and
+  # rootfs_unpack.sh.  Changing it here is the only place required.
+  ROOTFS_PATH:   /tmp/rootfs.tar.zst
 
 jobs:
-  # ── Self-hosted runner (local Windows PC with WSL2) ──────────────────────────
-  build-self-hosted:
-    name: "Build ${{ inputs.platform }}-${{ inputs.flavor }} (self-hosted)"
-    runs-on: [self-hosted, linux, x64]
-    continue-on-error: true
+  # ── 1/5 Bootstrap (stages 1-2) ───────────────────────────────────────────
+  bootstrap:
+    name: "[1/5] Bootstrap ${{ inputs.platform }}-${{ inputs.flavor }} (stages 1-2)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q debootstrap gdisk parted wget curl git rsync xz-utils tar zstd
+
+      - name: Prepare mount point
+        run: sudo mkdir -p /mnt/gentoo
+
+      - name: Run stages 1-2 (bootstrap)
+        env:
+          START_STAGE: "1"
+          END_STAGE: "2"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs micro-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-bootstrap
+          path: ${{ env.ROOTFS_PATH }}
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── 2/5 Base system (stages 3-5) ─────────────────────────────────────────
+  base-system:
+    name: "[2/5] Base system ${{ inputs.platform }}-${{ inputs.flavor }} (stages 3-5)"
+    needs: [bootstrap]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download bootstrap rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-bootstrap
+          path: /tmp
+
+      - name: Install host prerequisites (QEMU for ARM)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd rsync
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stages 3-5 (base system)
+        env:
+          START_STAGE: "3"
+          END_STAGE: "5"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs micro-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-base
+          path: ${{ env.ROOTFS_PATH }}
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── 3/5 Kernel (stage 6) ─────────────────────────────────────────────────
+  # This job is the longest (~4-6 h on github-hosted runners).
+  # If it times out, click "Re-run failed jobs" — the rootfs uploaded by the
+  # failed job includes kernel source + sub-step checkpoint files so compilation
+  # resumes from the last completed checkpoint rather than from scratch.
+  # ccache is preserved across runs via the GitHub Actions cache.
+  kernel:
+    name: "[3/5] Kernel ${{ inputs.platform }}-${{ inputs.flavor }} (stage 6)"
+    needs: [base-system]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download base-system rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-base
+          path: /tmp
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd ccache
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support \
+              gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+              gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
+
+      - name: Restore ccache (speeds up re-compilation on re-runs)
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ha-ccache-${{ inputs.platform }}
+          key: kernel-ccache-${{ inputs.platform }}-${{ hashFiles('scripts/gentoo/stage6.sh', 'scripts/gentoo/common.sh') }}
+          restore-keys: |
+            kernel-ccache-${{ inputs.platform }}-
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stage 6 (kernel build)
+        env:
+          START_STAGE: "6"
+          END_STAGE: "6"
+          CCACHE_HOST_DIR: /tmp/ha-ccache-${{ inputs.platform }}
+        run: sudo -E bash build.sh --non-interactive
+
+      # Always pack & upload so a timed-out run leaves a resumable rootfs
+      # (includes kernel source .o files and checkpoint files).
+      - name: Pack rootfs (always — preserves state for re-run)
+        if: always()
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}" --no-clean-src
+
+      - name: Upload rootfs micro-artifact (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-kernel
+          path: ${{ env.ROOTFS_PATH }}
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+  # ── 4/5 HA Install (stages 7-9) ──────────────────────────────────────────
+  ha-install:
+    name: "[4/5] HA Install ${{ inputs.platform }}-${{ inputs.flavor }} (stages 7-9)"
+    needs: [kernel]
+    runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
       - name: Checkout
@@ -62,76 +233,90 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Clone HA org repos
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
-            bash scripts/repos/clone_home_assistant_org.sh
+      - name: Download kernel rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-kernel
+          path: /tmp
 
-      - name: Install QEMU binfmt (ARM only)
-        if: ${{ inputs.platform != 'x64' }}
+      - name: Install host prerequisites
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q qemu-user-static binfmt-support
-          sudo update-binfmts --enable qemu-arm || true
-          sudo update-binfmts --enable qemu-aarch64 || true
+          sudo apt-get install -y -q zstd curl jq rsync dpkg
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
 
-      - name: Run build
-        run: |
-          sudo bash build.sh --non-interactive
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Upload artifact
+      - name: Run stages 7-9 (HA install)
+        env:
+          START_STAGE: "7"
+          END_STAGE: "9"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs micro-artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "gentooha-${{ inputs.platform }}-${{ inputs.flavor }}"
-          path: |
-            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-hainstall
+          path: ${{ env.ROOTFS_PATH }}
+          retention-days: 1
           if-no-files-found: error
-          retention-days: 14
 
-  # ── GitHub-hosted fallback (Linux, no WSL) ───────────────────────────────────
-  build-github-hosted:
-    name: "Build ${{ inputs.platform }}-${{ inputs.flavor }} (github-hosted)"
-    needs: build-self-hosted
-    if: ${{ failure() || needs.build-self-hosted.result == 'failure' }}
+  # ── 5/5 Pack final artifact (stage 10) ───────────────────────────────────
+  pack:
+    name: "[5/5] Pack ${{ inputs.platform }}-${{ inputs.flavor }} (stage 10)"
+    needs: [ha-install]
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Clone HA org repos
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
-            bash scripts/repos/clone_home_assistant_org.sh
+      - name: Download ha-install rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-hainstall
+          path: /tmp
 
-      - name: Install build dependencies
+      - name: Install host prerequisites
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
-            xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
-            dosfstools parted kpartx rsync \
-            qemu-user-static binfmt-support \
-            gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            debootstrap schroot
-          sudo update-binfmts --enable qemu-arm    || true
-          sudo update-binfmts --enable qemu-aarch64 || true
+            zstd xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
+            dosfstools parted kpartx rsync
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
 
-      - name: Run build
-        run: |
-          sudo bash build.sh --non-interactive
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Upload artifact
+      - name: Prepare artifact directory
+        run: sudo mkdir -p "${{ env.ARTIFACT_DIR }}"
+
+      - name: Run stage 10 (artifact generation)
+        env:
+          START_STAGE: "10"
+          END_STAGE: "10"
+          ARTIFACT_DIR: ${{ env.ARTIFACT_DIR }}
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Upload final artifact (.iso or .img)
         uses: actions/upload-artifact@v4
         with:
-          name: "gentooha-${{ inputs.platform }}-${{ inputs.flavor }}"
+          name: gentooha-${{ inputs.platform }}-${{ inputs.flavor }}
           path: |
-            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
+            ${{ env.ARTIFACT_DIR }}/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
           if-no-files-found: error
           retention-days: 14
