@@ -1,27 +1,34 @@
 # GentooHA build pipeline — produces a .iso (x64) or .img (ARM) artifact.
 #
-# The build is split into five sequential jobs so that long-running steps
-# (especially the kernel compilation in job 3) can be resumed after a timeout
-# without restarting from scratch:
+# The build is split into ten sequential jobs, one per build stage:
 #
-#  Job 1 – bootstrap   : stages 1-2  (Gentoo stage3 extraction)         ~30 min
-#  Job 2 – base-system : stages 3-5  (portage world update + HA prereqs) ~3 h
-#  Job 3 – kernel      : stage  6    (dual kernel build, with ccache)     ~4-6 h
-#  Job 4 – ha-install  : stages 7-9  (grub, Supervisor, AppArmor)         ~2 h
-#  Job 5 – pack        : stage  10   (produce final .iso / .img)          ~30 min
+#  stage1  – host prerequisites & TARGET_ROOT skeleton              ~5 min
+#  stage2  – Gentoo stage3 tarball download + extraction            ~20 min
+#  stage3  – portage sync + @world update + locale/profile          ~2-3 h
+#  stage4  – container runtime (Docker) + HA host deps              ~1 h
+#  stage5  – HA Supervisor compatibility identity layer             ~5 min
+#  stage6  – dual kernel build (compat + modern track, ccache)      ~4-6 h
+#  stage7  – bootloader (GRUB) configuration                        ~15 min
+#  stage8  – HA Supervised installer + os-agent files               ~15 min
+#  stage9  – AppArmor userspace tools                               ~30 min
+#  stage10 – final artifact generation (.iso / .img)                ~30 min
+#  cleanup – delete intermediate rootfs artifacts (keeps final only)
 #
-# Resume strategy
-# ───────────────
-# Each job (2-5) downloads the rootfs tarball produced by the previous job,
-# unpacks it, runs its stages, then re-packs and uploads a new rootfs artifact.
-# Checkpoint marker files inside the chroot (/var/lib/ha-build-state/) survive
-# the pack/unpack cycle, so within a job individual sub-steps are not repeated.
+# Artifact strategy
+# ─────────────────
+# Every stage (1-9) packs the Gentoo chroot into a rootfs tarball and uploads
+# it as "rootfs-{platform}-{flavor}-stageN".  A sidecar rootfs_meta.txt records
+# COMPLETED_STAGE=N so any consumer can verify the artifact without unpacking.
 #
-# If the kernel job times out, click "Re-run failed jobs" in the GitHub UI.
-# The re-run downloads the base-system rootfs (still available in the same
-# workflow run), restores it, and continues from the last kernel checkpoint.
-# ccache is restored from GitHub Actions cache across runs, so the compiler
-# cache survives even if a new workflow run is started.
+# run_all.sh reads the completed_stage marker embedded in the unpacked rootfs
+# and automatically skips stages already finished — so a re-run of any job
+# always picks up exactly where it left off with no manual START_STAGE tuning.
+#
+# The kernel job (stage6) uses "if: always()" for its pack/upload steps so
+# a timed-out run still saves progress (including kernel .o files + ccache).
+#
+# Once stage10 succeeds and the final .iso/.img is uploaded, the cleanup job
+# removes all intermediate rootfs-* artifacts to reclaim storage space.
 
 name: Build GentooHA
 
@@ -68,11 +75,11 @@ env:
   ROOTFS_PATH:   /tmp/rootfs.tar.zst
 
 jobs:
-  # ── 1/5 Bootstrap (stages 1-2) ───────────────────────────────────────────
-  bootstrap:
-    name: "[1/5] Bootstrap ${{ inputs.platform }}-${{ inputs.flavor }} (stages 1-2)"
+  # ── Stage 1: host prerequisites & TARGET_ROOT skeleton ───────────────────
+  stage1:
+    name: "[1/10] stage1 ${{ inputs.platform }}-${{ inputs.flavor }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,7 +94,51 @@ jobs:
       - name: Prepare mount point
         run: sudo mkdir -p /mnt/gentoo
 
-      - name: Run stages 1-2 (bootstrap)
+      - name: Run stage 1
+        env:
+          END_STAGE: "1"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs artifact (stage 1)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage1
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Stage 2: Gentoo stage3 tarball download + extraction ─────────────────
+  stage2:
+    name: "[2/10] stage2 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download stage-1 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage1
+          path: /tmp
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd wget curl tar
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stage 2
         env:
           END_STAGE: "2"
         run: sudo -E bash build.sh --non-interactive
@@ -95,8 +146,6 @@ jobs:
       - name: Pack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
 
-      # Artifact name encodes the highest completed stage (stage2) so any
-      # consumer knows exactly what work has been done without unpacking.
       - name: Upload rootfs artifact (stage 2)
         uses: actions/upload-artifact@v4
         with:
@@ -107,10 +156,10 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ── 2/5 Base system (stages 3-5) ─────────────────────────────────────────
-  base-system:
-    name: "[2/5] Base system ${{ inputs.platform }}-${{ inputs.flavor }} (stages 3-5)"
-    needs: [bootstrap]
+  # ── Stage 3: portage sync + @world update + locale/profile ───────────────
+  stage3:
+    name: "[3/10] stage3 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage2]
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -125,7 +174,7 @@ jobs:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage2
           path: /tmp
 
-      - name: Install host prerequisites (QEMU for ARM)
+      - name: Install host prerequisites
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q zstd rsync
@@ -138,9 +187,105 @@ jobs:
       - name: Unpack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
 
-      # START_STAGE is intentionally omitted: run_all.sh reads the completed_stage
-      # manifest embedded in the rootfs and auto-advances past finished stages.
-      - name: Run stages 3-5 (base system)
+      - name: Run stage 3
+        env:
+          END_STAGE: "3"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs artifact (stage 3)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage3
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Stage 4: container runtime (Docker) + HA host dependencies ───────────
+  stage4:
+    name: "[4/10] stage4 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download stage-3 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage3
+          path: /tmp
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd rsync
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stage 4
+        env:
+          END_STAGE: "4"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs artifact (stage 4)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage4
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Stage 5: HA Supervisor compatibility identity layer ───────────────────
+  stage5:
+    name: "[5/10] stage5 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage4]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download stage-4 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage4
+          path: /tmp
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd rsync
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stage 5
         env:
           END_STAGE: "5"
         run: sudo -E bash build.sh --non-interactive
@@ -158,15 +303,13 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ── 3/5 Kernel (stage 6) ─────────────────────────────────────────────────
-  # This job is the longest (~4-6 h on github-hosted runners).
-  # If it times out, click "Re-run failed jobs" — the rootfs uploaded by the
-  # failed job includes kernel source + sub-step checkpoint files so compilation
-  # resumes from the last completed checkpoint rather than from scratch.
-  # ccache is preserved across runs via the GitHub Actions cache.
-  kernel:
-    name: "[3/5] Kernel ${{ inputs.platform }}-${{ inputs.flavor }} (stage 6)"
-    needs: [base-system]
+  # ── Stage 6: dual kernel build (compat + modern, ccache) ─────────────────
+  # Longest job (~4-6 h).  Pack/upload use "if: always()" so a timed-out run
+  # still saves the partial kernel sources + ccache + checkpoint files, and
+  # "Re-run failed jobs" continues from the last sub-step checkpoint.
+  stage6:
+    name: "[6/10] stage6 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage5]
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -204,15 +347,14 @@ jobs:
       - name: Unpack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Run stage 6 (kernel build)
+      - name: Run stage 6
         env:
           END_STAGE: "6"
           CCACHE_HOST_DIR: /tmp/ha-ccache-${{ inputs.platform }}
         run: sudo -E bash build.sh --non-interactive
 
-      # Always pack & upload so a timed-out run leaves a resumable rootfs
-      # (includes kernel source .o files and checkpoint files).
-      - name: Pack rootfs (always — preserves state for re-run)
+      # Keep kernel .o files so a re-run of this job can resume compilation.
+      - name: Pack rootfs (always — preserves kernel build state for re-run)
         if: always()
         run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}" --no-clean-src
 
@@ -228,12 +370,12 @@ jobs:
           overwrite: true
           if-no-files-found: error
 
-  # ── 4/5 HA Install (stages 7-9) ──────────────────────────────────────────
-  ha-install:
-    name: "[4/5] HA Install ${{ inputs.platform }}-${{ inputs.flavor }} (stages 7-9)"
-    needs: [kernel]
+  # ── Stage 7: bootloader (GRUB) configuration ─────────────────────────────
+  stage7:
+    name: "[7/10] stage7 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage6]
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -249,7 +391,7 @@ jobs:
       - name: Install host prerequisites
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q zstd curl jq rsync dpkg
+          sudo apt-get install -y -q zstd rsync
           if [[ "${{ inputs.platform }}" != "x64" ]]; then
             sudo apt-get install -y -q qemu-user-static binfmt-support
             sudo update-binfmts --enable qemu-arm    || true
@@ -259,7 +401,100 @@ jobs:
       - name: Unpack rootfs
         run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
 
-      - name: Run stages 7-9 (HA install)
+      - name: Run stage 7
+        env:
+          END_STAGE: "7"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs artifact (stage 7)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage7
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Stage 8: HA Supervised installer + os-agent files ────────────────────
+  stage8:
+    name: "[8/10] stage8 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download stage-7 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage7
+          path: /tmp
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd curl jq rsync dpkg
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stage 8
+        env:
+          END_STAGE: "8"
+        run: sudo -E bash build.sh --non-interactive
+
+      - name: Pack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_pack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Upload rootfs artifact (stage 8)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage8
+          path: |
+            ${{ env.ROOTFS_PATH }}
+            /tmp/rootfs_meta.txt
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Stage 9: AppArmor userspace tools ────────────────────────────────────
+  stage9:
+    name: "[9/10] stage9 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage8]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download stage-8 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage8
+          path: /tmp
+
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zstd rsync
+          if [[ "${{ inputs.platform }}" != "x64" ]]; then
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+            sudo update-binfmts --enable qemu-arm    || true
+            sudo update-binfmts --enable qemu-aarch64 || true
+          fi
+
+      - name: Unpack rootfs
+        run: sudo -E bash scripts/gentoo/rootfs_unpack.sh "${{ env.ROOTFS_PATH }}"
+
+      - name: Run stage 9
         env:
           END_STAGE: "9"
         run: sudo -E bash build.sh --non-interactive
@@ -277,10 +512,10 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ── 5/5 Pack final artifact (stage 10) ───────────────────────────────────
-  pack:
-    name: "[5/5] Pack ${{ inputs.platform }}-${{ inputs.flavor }} (stage 10)"
-    needs: [ha-install]
+  # ── Stage 10: final artifact generation (.iso / .img) ────────────────────
+  stage10:
+    name: "[10/10] stage10 ${{ inputs.platform }}-${{ inputs.flavor }}"
+    needs: [stage9]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -313,7 +548,7 @@ jobs:
       - name: Prepare artifact directory
         run: sudo mkdir -p "${{ env.ARTIFACT_DIR }}"
 
-      - name: Run stage 10 (artifact generation)
+      - name: Run stage 10
         env:
           END_STAGE: "10"
           ARTIFACT_DIR: ${{ env.ARTIFACT_DIR }}
@@ -327,3 +562,43 @@ jobs:
             ${{ env.ARTIFACT_DIR }}/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
           if-no-files-found: error
           retention-days: 14
+
+  # ── Cleanup: delete all intermediate rootfs artifacts ────────────────────
+  # Runs after stage10 (including on failure) to reclaim storage space.
+  # The final gentooha-* artifact is never touched; only rootfs-* are removed.
+  cleanup:
+    name: "Cleanup intermediate rootfs artifacts"
+    needs: [stage10]
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Delete intermediate rootfs artifacts
+        run: |
+          echo "Listing rootfs-* artifacts for run ${{ github.run_id }}"
+          artifact_ids=$(gh api \
+            "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --paginate \
+            --jq '.artifacts[] | select(.name | startswith("rootfs-")) | .id')
+
+          if [[ -z "$artifact_ids" ]]; then
+            echo "No intermediate rootfs artifacts found; nothing to delete."
+            exit 0
+          fi
+
+          failed=0
+          echo "$artifact_ids" | while read -r id; do
+            echo "Deleting artifact id=$id"
+            if ! gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/$id"; then
+              echo "WARNING: failed to delete artifact id=$id" >&2
+              failed=1
+            fi
+          done
+          if [[ "$failed" -eq 0 ]]; then
+            echo "Cleanup complete."
+          else
+            echo "Cleanup finished with errors; some artifacts may remain." >&2
+            exit 1
+          fi

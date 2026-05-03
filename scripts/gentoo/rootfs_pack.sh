@@ -51,7 +51,7 @@ mkdir -p "$(dirname "$PACK_OUT")"
 _META="$(dirname "$PACK_OUT")/rootfs_meta.txt"
 if [[ -f "$STATE_ROOT/completed_stage" ]]; then
   _COMPLETED_STAGE="$(cat "$STATE_ROOT/completed_stage")"
-  log "Embedding completed_stage=$_COMPLETED_STAGE in $PACK_OUT"
+  log "Writing completed_stage=$_COMPLETED_STAGE to sidecar $_META"
   printf 'COMPLETED_STAGE=%s\n' "$_COMPLETED_STAGE" > "$_META"
 else
   log "No completed_stage marker found; rootfs_meta.txt will be absent"
