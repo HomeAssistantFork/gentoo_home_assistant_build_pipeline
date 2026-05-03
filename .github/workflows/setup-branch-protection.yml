@@ -1,0 +1,42 @@
+name: Setup Branch Protection
+
+# Run this workflow once (manually) after the PR Checks workflow has been
+# pushed to main. It configures the `main` branch to require the "PR Gate"
+# status check to pass before any PR can be merged.
+#
+# Requirements:
+#   • The actor who triggers this workflow must have admin rights on the repo.
+#   • The GITHUB_TOKEN is automatically granted `administration: write` below.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  administration: write
+
+jobs:
+  configure:
+    name: Configure main branch protection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply branch protection rule
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fsSL \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/branches/main/protection" \
+            -d '{
+              "required_status_checks": {
+                "strict": true,
+                "contexts": ["PR Gate"]
+              },
+              "enforce_admins": false,
+              "required_pull_request_reviews": null,
+              "restrictions": null
+            }'
+
+          echo "Branch protection configured: 'PR Gate' is now a required check on main."
