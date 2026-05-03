@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 # GentooHA local build launcher
 # Usage: bash build.sh [--non-interactive]
+#
+# This script runs entirely inside the current Linux environment.
+# It works on native Linux, inside a WSL2 distro, or inside a CI runner.
+# No WSL is installed or required when running natively on Linux.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NON_INTERACTIVE=false
 for arg in "$@"; do [[ "$arg" == "--non-interactive" ]] && NON_INTERACTIVE=true; done
+
+# Detect execution environment and log it so the operator knows where stages will run.
+if grep -qsi microsoft /proc/version 2>/dev/null; then
+  echo "[build.sh] Environment: WSL2 ($(uname -r))"
+elif [[ -f /proc/version ]]; then
+  echo "[build.sh] Environment: native Linux ($(uname -r))"
+fi
 
 VALID_PLATFORMS=(x64 pi3 pi4 pizero2 bbb pbv2)
 VALID_FLAVORS=(live installer)

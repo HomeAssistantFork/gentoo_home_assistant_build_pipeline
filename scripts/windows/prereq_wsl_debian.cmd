@@ -17,7 +17,8 @@ if exist "%STATE_FILE%" (
 )
 
 echo [INFO] WSL prerequisite script
-echo [INFO] This script WILL delete an existing Debian WSL distro without backup.
+echo [INFO] This script sets up a Debian WSL distro for building GentooHA.
+echo [INFO] An existing Debian distro will NOT be removed.
 echo.
 
 where wsl >nul 2>nul
@@ -35,24 +36,19 @@ set "EXISTING_DISTRO="
 :foundDistro
 
 if defined EXISTING_DISTRO (
-  echo [WARN] Found existing Debian distro: !EXISTING_DISTRO!
-  choice /C YN /M "Delete this distro now?"
-  if errorlevel 2 (
-    echo [INFO] Aborted by user.
-    exit /b 0
-  )
-
-  echo [INFO] Unregistering distro !EXISTING_DISTRO! ...
-  wsl --unregister "!EXISTING_DISTRO!"
+  echo [INFO] Debian distro already present: !EXISTING_DISTRO!
+  echo [INFO] Skipping re-install to preserve existing environment.
+  echo [INFO] Running bootstrap packages inside existing distro instead...
+  set "BOOTSTRAP_CMD=set -euo pipefail; apt update; DEBIAN_FRONTEND=noninteractive apt -y full-upgrade; DEBIAN_FRONTEND=noninteractive apt -y install build-essential git curl jq wget ca-certificates gnupg lsb-release debootstrap"
+  wsl -d "!EXISTING_DISTRO!" -u root -- bash -lc "!BOOTSTRAP_CMD!"
   if errorlevel 1 (
-    echo [ERROR] Failed to unregister distro !EXISTING_DISTRO!.
+    echo [ERROR] Bootstrap package update failed inside !EXISTING_DISTRO!.
     exit /b 1
   )
-) else (
-  echo [INFO] No existing Debian distro found.
+  goto :bootstrap_done
 )
 
-echo [INFO] Installing Debian from WSL online catalog...
+echo [INFO] No existing Debian distro found. Installing from WSL online catalog...
 wsl --install -d Debian
 if errorlevel 1 (
   echo [ERROR] Failed to install Debian. Check output from wsl --install.
@@ -72,6 +68,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:bootstrap_done
 echo [INFO] Marking completion in %STATE_FILE%
 >"%STATE_FILE%" echo completed=%DATE% %TIME%
 

@@ -100,11 +100,28 @@ if %ERRORLEVEL% NEQ 0 (
 echo     Copy done.
 echo.
 
-:: --- Step 3: Unregister old GentooHA if it exists, then import fresh ---
+:: --- Step 3: Import GentooHA WSL2 distro (skip if already present) ---
 :step3
 echo [3/6] Importing GentooHA WSL2 distro...
-wsl --unregister GentooHA 2>nul
-echo     (Ignore error above if GentooHA did not exist)
+wsl -d GentooHA -- echo ok >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo     GentooHA distro already exists.
+    set "OVERWRITE_HA=N"
+    set /P OVERWRITE_HA="Overwrite (unregister + reimport)? (y/N) [N]: "
+    if /I not "!OVERWRITE_HA!"=="y" (
+        echo     Keeping existing GentooHA distro. Skipping import.
+        goto step4
+    )
+    echo     Unregistering existing GentooHA distro...
+    wsl --unregister GentooHA
+    if %ERRORLEVEL% NEQ 0 (
+        echo ERROR: Failed to unregister existing GentooHA distro.
+        pause
+        exit /b 1
+    )
+) else (
+    echo     No existing GentooHA distro found.
+)
 if not exist "C:\Users\tamus\AppData\Local\GentooHA" mkdir "C:\Users\tamus\AppData\Local\GentooHA"
 wsl --import GentooHA "C:\Users\tamus\AppData\Local\GentooHA" "%TEMP%\gentoo-ha-fixed.tar.gz" --version 2
 if %ERRORLEVEL% NEQ 0 (
