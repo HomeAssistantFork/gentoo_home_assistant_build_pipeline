@@ -8,12 +8,12 @@ NON_INTERACTIVE=false
 for arg in "$@"; do [[ "$arg" == "--non-interactive" ]] && NON_INTERACTIVE=true; done
 
 VALID_PLATFORMS=(x64 pi3 pi4 pizero2 bbb pbv2)
-VALID_FLAVORS=(live installer)
+VALID_FLAVORS=(live installer debug)
 
 if $NON_INTERACTIVE; then
   # CI mode: read entirely from environment
   PLATFORM="${PLATFORM:-x64}"
-  FLAVOR="${FLAVOR:-live}"
+  FLAVOR="${FLAVOR:-installer}"
   START_STAGE="${START_STAGE:-1}"
   CLEAN_STATE="${CLEAN_STATE:-false}"
 else
@@ -23,7 +23,7 @@ else
   echo "============================================================"
   echo ""
   echo "Platforms:"
-  echo "  x64      - Generic PC / VM (produces .iso)"
+  echo "  x64      - Generic PC / VM (produces preinstalled .img + .vdi)"
   echo "  pi3      - Raspberry Pi 3 (produces .img)"
   echo "  pi4      - Raspberry Pi 4 (produces .img)"
   echo "  pizero2  - Raspberry Pi Zero 2 W (produces .img)"
@@ -42,10 +42,11 @@ else
   echo "Flavors:"
   echo "  live       - Bootable live system (does not install)"
   echo "  installer  - Asks to install to disk on first boot"
+  echo "  debug      - Verbose boot diagnostics on console"
   echo ""
   while true; do
-    read -rp "Flavor [live]: " FLAVOR
-    FLAVOR="${FLAVOR:-live}"
+    read -rp "Flavor [installer]: " FLAVOR
+    FLAVOR="${FLAVOR:-installer}"
     # shellcheck disable=SC2076
     if [[ " ${VALID_FLAVORS[*]} " =~ " ${FLAVOR} " ]]; then break; fi
     echo "Invalid flavor. Choose from: ${VALID_FLAVORS[*]}"
@@ -53,10 +54,10 @@ else
 
   echo ""
   while true; do
-    read -rp "Start from stage (1-10) [1]: " START_STAGE
+    read -rp "Start from stage (1-11) [1]: " START_STAGE
     START_STAGE="${START_STAGE:-1}"
-    if [[ "$START_STAGE" =~ ^[0-9]+$ ]] && [[ "$START_STAGE" -ge 1 ]] && [[ "$START_STAGE" -le 10 ]]; then break; fi
-    echo "Enter a number from 1 to 10."
+    if [[ "$START_STAGE" =~ ^[0-9]+$ ]] && [[ "$START_STAGE" -ge 1 ]] && [[ "$START_STAGE" -le 11 ]]; then break; fi
+    echo "Enter a number from 1 to 11."
   done
 
   echo ""

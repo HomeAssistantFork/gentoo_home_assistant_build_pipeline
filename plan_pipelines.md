@@ -46,7 +46,7 @@ Every build runs on **two runner targets** via GitHub Actions:
 |----------------|-------------------------------------|-----------|
 | PLATFORM       | x64, pi3, pi4, pizero2, bbb, pbv2   | x64       |
 | FLAVOR         | live, installer                     | live      |
-| START_STAGE    | 1–10                                | 1         |
+| START_STAGE    | 1–11                                | 1         |
 | CLEAN_STATE    | true/false                          | false     |
 | ARTIFACT_DIR   | path                                | /var/lib/ha-gentoo-hybrid/artifacts |
 | CROSS_COMPILE  | (auto-set by common.sh from PLATFORM)| —        |
@@ -77,31 +77,32 @@ stage6  → Dual kernel build (compat + modern) with HA/AppArmor kernel options
 stage7  → os-agent install
 stage8  → hassio-supervisor + Home Assistant Supervised install
 stage9  → AppArmor userspace (emerge sys-apps/apparmor + systemctl enable)
-stage10 → Artifact generation
+stage10 → Internal cleanup (remove source/cache dirs)
+stage11 → Artifact generation
           PLATFORM=x64           → .iso (grub-mkrescue live + syslinux installer)
           PLATFORM=pi*/bbb/pbv2  → .img (dd + losetup + ext4/fat32 partition layout)
 ```
 
 ## Artifact Generation Detail
 
-### x64 ISO (stage10, FLAVOR=live)
+### x64 ISO (stage11, FLAVOR=live)
 - squashfs rootfs → LiveOS/rootfs.squashfs
 - dracut with dmsquash-live module
 - grub2 EFI + BIOS boot
 - ISO label: GENTOOHA
 
-### x64 ISO (stage10, FLAVOR=installer)
+### x64 ISO (stage11, FLAVOR=installer)
 - Same squashfs rootfs
 - Additional installer script in /root/install.sh run from live environment
 - Grub menu adds "Install to disk" entry
 
-### ARM IMG (stage10, FLAVOR=live)
+### ARM IMG (stage11, FLAVOR=live)
 - Partition layout: 256MB FAT32 boot + rest ext4 root
 - Boot: kernel + dtb + initramfs in /boot partition
 - U-Boot or device-specific bootloader config per platform
 - Compressed: `.img.xz`
 
-### ARM IMG (stage10, FLAVOR=installer)
+### ARM IMG (stage11, FLAVOR=installer)
 - Same partition layout
 - /root/install.sh auto-runs on first boot from a flag file
 - Writes itself to target disk when booted on target hardware
@@ -130,7 +131,7 @@ stage10 → Artifact generation
 Interactive mode (default):
 - Prompt: Which platform? (x64/pi3/pi4/pizero2/bbb/pbv2)
 - Prompt: Which flavor? (live/installer)
-- Prompt: Start from stage? (1–10, default 1)
+- Prompt: Start from stage? (1–11, default 1)
 - Prompt: Clean prior state? (y/N)
 Exports env vars and calls `scripts/gentoo/run_all.sh`.
 
@@ -169,7 +170,8 @@ GPU driver support requires:
 - [x] `scripts/gentoo/common.sh` — PLATFORM/FLAVOR/ARCH/CROSS_COMPILE
 - [x] `scripts/gentoo/stage6.sh` — ARM cross-compile + platform defconfig
 - [x] `scripts/gentoo/stage9.sh` — AppArmor userspace
-- [x] `scripts/gentoo/stage10.sh` — ISO vs IMG artifact output
+- [x] `scripts/gentoo/stage10.sh` — internal source/cache cleanup
+- [x] `scripts/gentoo/stage11.sh` — ISO/IMG artifact output
 - [x] `scripts/gentoo/run_all.sh` — START_STAGE + env pass-through
 - [x] `build.sh` — interactive local launcher
 - [x] `build.cmd` — Windows local launcher

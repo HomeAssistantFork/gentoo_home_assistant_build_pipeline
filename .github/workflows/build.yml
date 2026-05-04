@@ -14,9 +14,9 @@ on:
         required: true
         default: live
         type: choice
-        options: [live, installer]
+        options: [live, installer, debug]
       start_stage:
-        description: "Start from stage (1-10)"
+        description: "Start from stage (1-11)"
         required: false
         default: "1"
       clean_state:

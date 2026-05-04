@@ -23,7 +23,7 @@ If you want, I can now do the second pass and harden stage6 specifically for a t
 - `scripts/windows/prereq_wsl_debian.cmd`
 - `scripts/repos/clone_home_assistant_org.sh`
 - `scripts/gentoo/run_all.sh`
-- `scripts/gentoo/stage1.sh` ... `scripts/gentoo/stage10.sh`
+- `scripts/gentoo/stage1.sh` ... `scripts/gentoo/stage11.sh`
 - `scripts/compat/preflight_ha_supervisor.sh`
 - `scripts/validation/validate_ha_stack.sh`
 - `scripts/validation/run_validation_bundle.sh`
@@ -88,6 +88,7 @@ sudo bash scripts/gentoo/stage7.sh
 sudo bash scripts/gentoo/stage8.sh
 sudo bash scripts/gentoo/stage9.sh
 sudo bash scripts/gentoo/stage10.sh
+sudo bash scripts/gentoo/stage11.sh
 ```
 
 ### 4) Run Home Assistant compatibility preflight
@@ -124,13 +125,13 @@ export KERNEL_TRACK=modern
 sudo bash scripts/validation/run_validation_bundle.sh
 ```
 
-### 6) Pure VM ISO workflow
+### 6) Pure VM artifact workflow
 
 See:
 
 - `docs/pure_vm_iso_workflow.md`
 
-ISO output path default:
+Artifact output path default:
 
 - `/var/lib/ha-gentoo-hybrid/artifacts/gentooha-live.iso`
 

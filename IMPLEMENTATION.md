@@ -29,7 +29,7 @@ chmod +x scripts/gentoo/*.sh scripts/compat/*.sh scripts/validation/*.sh scripts
 sudo bash scripts/gentoo/run_all.sh
 
 You can also run each stage individually:
-- stage1.sh through stage10.sh
+- stage1.sh through stage11.sh
 
 Important inputs:
 - STAGE3_TARBALL must point to a valid Gentoo stage3 tarball before stage2.
@@ -58,10 +58,12 @@ sudo bash scripts/validation/run_validation_bundle.sh
 Artifacts are written under:
 - artifacts/validation/
 
-## 7) Pure VM ISO generation
-Stage10 creates a live ISO artifact for VM testing:
+## 7) Artifact generation
+Stage10 performs internal source/cache cleanup before image packaging.
+Stage11 creates VM/board artifacts for testing:
 
 sudo bash scripts/gentoo/stage10.sh
+sudo bash scripts/gentoo/stage11.sh
 
 Default output:
 - /var/lib/ha-gentoo-hybrid/artifacts/gentooha-live.iso

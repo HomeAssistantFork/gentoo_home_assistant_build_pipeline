@@ -6,7 +6,7 @@ echo  GentooHA Build Launcher
 echo ============================================================
 echo.
 echo Platforms:
-echo   x64      - Generic PC / VM  (produces .iso)
+echo   x64      - Generic PC / VM  (produces preinstalled .img + .vdi)
 echo   pi3      - Raspberry Pi 3   (produces .img)
 echo   pi4      - Raspberry Pi 4   (produces .img)
 echo   pizero2  - Raspberry Pi Zero 2 W  (produces .img)
@@ -32,15 +32,17 @@ echo.
 echo Flavors:
 echo   live       - Bootable live system
 echo   installer  - Installs to disk on first boot
+echo   debug      - Verbose boot diagnostics on console
 echo.
 
 :ask_flavor
 set "FLAVOR="
-set /P FLAVOR="Flavor [live]: "
-if "%FLAVOR%"=="" set "FLAVOR=live"
+set /P FLAVOR="Flavor [installer]: "
+if "%FLAVOR%"=="" set "FLAVOR=installer"
 if /I "%FLAVOR%"=="live"      goto flavor_ok
 if /I "%FLAVOR%"=="installer" goto flavor_ok
-echo Invalid flavor. Choose: live  installer
+if /I "%FLAVOR%"=="debug"     goto flavor_ok
+echo Invalid flavor. Choose: live  installer  debug
 goto ask_flavor
 
 :flavor_ok
@@ -48,7 +50,7 @@ echo.
 
 :ask_stage
 set "START_STAGE="
-set /P START_STAGE="Start from stage (1-10) [1]: "
+set /P START_STAGE="Start from stage (1-11) [1]: "
 if "%START_STAGE%"=="" set "START_STAGE=1"
 if "%START_STAGE%"=="1"  goto stage_ok
 if "%START_STAGE%"=="2"  goto stage_ok
@@ -60,7 +62,8 @@ if "%START_STAGE%"=="7"  goto stage_ok
 if "%START_STAGE%"=="8"  goto stage_ok
 if "%START_STAGE%"=="9"  goto stage_ok
 if "%START_STAGE%"=="10" goto stage_ok
-echo Enter a number from 1 to 10.
+if "%START_STAGE%"=="11" goto stage_ok
+echo Enter a number from 1 to 11.
 goto ask_stage
 
 :stage_ok
@@ -121,14 +124,18 @@ if /I "%PLATFORM%"=="x64" (
   echo.
   set "RUN_IMPORT=Y"
   set /P RUN_IMPORT="Import and boot GentooHA in WSL2 now? (Y/n) [Y]: "
-  if /I not "!RUN_IMPORT!"=="n" (
+  if /I not "%RUN_IMPORT%"=="n" (
     call "%~dp0import_and_boot_gentooha.cmd" 1
   )
 )
 
 echo.
 echo Build complete.
-echo Artifact: gentooha-%PLATFORM%-%FLAVOR%.%ARTIFACT_EXT%
-echo Location: %WIN_PATH%repos\home-assistant\artifacts\ (or check /var/lib/ha-gentoo-hybrid/artifacts/ inside WSL)
+if /I "%PLATFORM%"=="x64" (
+  echo Artifacts: gentooha-%PLATFORM%-%FLAVOR%.img and gentooha-%PLATFORM%-%FLAVOR%.vdi
+) else (
+  echo Artifact: gentooha-%PLATFORM%-%FLAVOR%.img
+)
+echo Location: %WIN_PATH%artifacts\ and /var/lib/ha-gentoo-hybrid/artifacts/ inside WSL
 echo.
 pause

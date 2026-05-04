@@ -24,11 +24,12 @@ sudo bash scripts/gentoo/run_all.sh
 
 - stage1 .. stage8 (base + Supervisor)
 - stage9 (AppArmor userspace)
-- stage10 (live ISO artifact generation)
+- stage10 (internal cleanup)
+- stage11 (artifact generation)
 
 ## ISO artifact output
 
-Stage10 writes a live ISO artifact to:
+Stage11 writes build artifacts to:
 
 - `/var/lib/ha-gentoo-hybrid/artifacts/gentooha-live.iso`
 
@@ -38,6 +39,7 @@ You can override with:
 export ARTIFACT_DIR=/path/to/artifacts
 export ISO_NAME=gentooha-live.iso
 sudo bash scripts/gentoo/stage10.sh
+sudo bash scripts/gentoo/stage11.sh
 ```
 
 ## Booting as a VM

@@ -61,7 +61,9 @@ stage8: Supervisor plus Home Assistant deployment and add-on validation.
 
 stage9: AppArmor userspace install and service enablement.
 
-stage10: pure VM live ISO artifact generation.
+stage10: internal source/cache cleanup before packaging.
+
+stage11: pure VM artifact generation.
 
 Dependency: stage order is serial; verification gates between each stage.
 
@@ -106,7 +108,7 @@ Relevant files
 Windows cmd orchestration for WSL replacement and first-boot bootstrap.
 Repository cloning automation and manifest output definitions.
 Staged Gentoo scripts stage1 through stage8 with shared helpers.
-Staged Gentoo scripts stage9 (AppArmor userspace) and stage10 (ISO artifact).
+Staged Gentoo scripts stage9 (AppArmor userspace), stage10 (cleanup), and stage11 (artifact).
 Compatibility preflight and host identity provisioning scripts.
 Dual-kernel configuration and build metadata artifacts.
 Validation runner and report templates.

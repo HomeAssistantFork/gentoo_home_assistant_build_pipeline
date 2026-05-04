@@ -6,7 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 START_STAGE="${START_STAGE:-1}"
 
-ALL_STAGES=(stage1 stage2 stage3 stage4 stage5 stage6 stage7 stage8 stage9 stage10)
+ALL_STAGES=(stage1 stage2 stage3 stage4 stage5 stage6 stage7 stage8 stage9 stage10 stage11)
 
 log "Build config: PLATFORM=$PLATFORM FLAVOR=$FLAVOR ARCH=$ARCH START_STAGE=$START_STAGE"
 

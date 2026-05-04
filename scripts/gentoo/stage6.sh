@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 stage_start stage6
 require_root
+mount_chroot_fs
 
 KERNEL_COMPAT_LABEL="${KERNEL_COMPAT_LABEL:-compat}"
 KERNEL_MODERN_LABEL="${KERNEL_MODERN_LABEL:-modern}"
@@ -56,26 +57,34 @@ cd /usr/src/linux
 
 # Shared helper: apply all Docker/Supervisor required kernel options.
 apply_ha_kernel_options() {
-  # Overlay filesystem (containers, add-on layers)
-  ./scripts/config --module CONFIG_OVERLAY_FS
-  # Virtual ethernet pairs (container networking)
-  ./scripts/config --module CONFIG_VETH
-  # Bridge and bridge-netfilter (Docker default network)
-  ./scripts/config --module CONFIG_BRIDGE
-  ./scripts/config --module CONFIG_BRIDGE_NETFILTER
+  # Overlay filesystem (containers, add-on layers) — built-in
+  ./scripts/config --enable CONFIG_OVERLAY_FS
   # Dummy and MACVLAN/IPVLAN (Supervisor network isolation)
-  ./scripts/config --module CONFIG_DUMMY
+  ./scripts/config --enable CONFIG_DUMMY
   ./scripts/config --module CONFIG_MACVLAN
   ./scripts/config --module CONFIG_IPVLAN
-  # Netfilter conntrack and NAT
-  ./scripts/config --module CONFIG_NF_CONNTRACK
-  ./scripts/config --module CONFIG_NF_NAT
-  ./scripts/config --module CONFIG_NF_NAT_TFTP
-  ./scripts/config --module CONFIG_NF_CONNTRACK_TFTP
-  ./scripts/config --module CONFIG_IP_NF_FILTER
-  ./scripts/config --module CONFIG_IP_NF_TARGET_MASQUERADE
-  ./scripts/config --module CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
-  ./scripts/config --module CONFIG_NETFILTER_XT_MATCH_CONNTRACK
+  # Netfilter core — built-in so Docker never needs modprobe
+  ./scripts/config --enable CONFIG_NETFILTER
+  ./scripts/config --enable CONFIG_NETFILTER_ADVANCED
+  ./scripts/config --enable CONFIG_NF_CONNTRACK
+  ./scripts/config --enable CONFIG_NF_NAT
+  ./scripts/config --enable CONFIG_NF_NAT_TFTP
+  ./scripts/config --enable CONFIG_NF_CONNTRACK_TFTP
+  ./scripts/config --enable CONFIG_IP_NF_IPTABLES
+  ./scripts/config --enable CONFIG_IP_NF_FILTER
+  ./scripts/config --enable CONFIG_IP_NF_NAT
+  ./scripts/config --enable CONFIG_IP_NF_TARGET_MASQUERADE
+  ./scripts/config --enable CONFIG_IP_NF_TARGET_REJECT
+  ./scripts/config --enable CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
+  ./scripts/config --enable CONFIG_NETFILTER_XT_MATCH_CONNTRACK
+  ./scripts/config --enable CONFIG_NETFILTER_XT_TARGET_MASQUERADE
+  ./scripts/config --enable CONFIG_NF_TABLES
+  ./scripts/config --enable CONFIG_NFT_NAT
+  ./scripts/config --enable CONFIG_NFT_MASQ
+  # Bridge and veth — built-in for Docker bridged networking
+  ./scripts/config --enable CONFIG_BRIDGE
+  ./scripts/config --enable CONFIG_BRIDGE_NETFILTER
+  ./scripts/config --enable CONFIG_VETH
   # Namespaces
   ./scripts/config --enable CONFIG_NAMESPACES
   ./scripts/config --enable CONFIG_NET_NS
@@ -100,9 +109,7 @@ apply_ha_kernel_options() {
   ./scripts/config --enable CONFIG_POSIX_MQUEUE
   # Keys (container image verification)
   ./scripts/config --enable CONFIG_KEYS
-  # iptables legacy (hassio-apparmor and Supervisor use iptables rules)
-  ./scripts/config --module CONFIG_IP_NF_IPTABLES
-  ./scripts/config --module CONFIG_IP_NF_TARGET_REJECT
+  # iptables legacy (already enabled as built-in above via CONFIG_IP_NF_IPTABLES)
   # Live ISO / loopback / optical filesystem support
   ./scripts/config --module CONFIG_BLK_DEV_LOOP || true
   ./scripts/config --module CONFIG_SQUASHFS || true
