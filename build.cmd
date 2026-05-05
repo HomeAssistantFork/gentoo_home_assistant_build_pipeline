@@ -100,6 +100,24 @@ goto ask_artifacts
 
 :artifacts_ok
 
+:ask_binpkg
+echo.
+echo Build method:
+echo   b  - Binary packages (fast, uses Gentoo binary host) [default]
+echo   s  - Compile from source (slow, full control)
+echo   Note: packages with custom USE flags still fall back to source automatically.
+echo.
+set "BINPKG_ANS=b"
+set /P BINPKG_ANS="Build method binary/source (b/s) [b]: "
+if "%BINPKG_ANS%"=="" set "BINPKG_ANS=b"
+set "USE_BINPKG=true"
+if /I "%BINPKG_ANS%"=="b" set "USE_BINPKG=true"
+if /I "%BINPKG_ANS%"=="s" set "USE_BINPKG=false"
+if /I not "%USE_BINPKG%"=="false" if /I not "%USE_BINPKG%"=="true" (
+  echo Invalid choice. Use: b (binary) or s (source).
+  goto ask_binpkg
+)
+
 :: Auto-resume: read completed_stage from WSL state directory
 set "COMPLETED_STAGE=0"
 for /f "delims=" %%S in ('wsl -d Debian -u root -- bash -c "cat /var/lib/ha-gentoo-hybrid/state/completed_stage 2>/dev/null || echo 0" 2^>nul') do set "COMPLETED_STAGE=%%S"
@@ -127,6 +145,7 @@ echo    FLAVOR      = %FLAVOR%
 echo    START_STAGE = %START_STAGE%
 echo    CLEAN_STATE = %CLEAN_STATE%
 echo    ARTIFACTS   = %ARTIFACT_ACTION% (a=archive, y=remove, n=keep)
+echo    USE_BINPKG  = %USE_BINPKG%
 echo ============================================================
 echo.
 
@@ -168,7 +187,7 @@ if "%WSL_PATH%"=="" (
 :: Strip trailing slash
 if "%WSL_PATH:~-1%"=="/" set "WSL_PATH=%WSL_PATH:~0,-1%"
 
-wsl -d %WSL_DISTRO% -- bash -c "export PLATFORM=%PLATFORM% FLAVOR=%FLAVOR% START_STAGE=%START_STAGE% CLEAN_STATE=%CLEAN_STATE% ARTIFACT_ACTION=%ARTIFACT_ACTION%; cd '%WSL_PATH%'; bash build.sh --non-interactive"
+wsl -d %WSL_DISTRO% -- bash -c "export PLATFORM=%PLATFORM% FLAVOR=%FLAVOR% START_STAGE=%START_STAGE% CLEAN_STATE=%CLEAN_STATE% ARTIFACT_ACTION=%ARTIFACT_ACTION% USE_BINPKG=%USE_BINPKG%; cd '%WSL_PATH%'; bash build.sh --non-interactive"
 if %ERRORLEVEL% NEQ 0 (
   echo.
   echo ERROR: Build failed. See output above.

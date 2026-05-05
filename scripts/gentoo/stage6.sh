@@ -72,7 +72,6 @@ apply_ha_kernel_options() {
   ./scripts/config --enable CONFIG_NF_CONNTRACK_TFTP
   ./scripts/config --enable CONFIG_IP_NF_IPTABLES
   ./scripts/config --enable CONFIG_IP_NF_FILTER
-  ./scripts/config --enable CONFIG_IP_NF_NAT
   ./scripts/config --enable CONFIG_IP_NF_TARGET_MASQUERADE
   ./scripts/config --enable CONFIG_IP_NF_TARGET_REJECT
   ./scripts/config --enable CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
@@ -153,7 +152,6 @@ verify_ha_kernel_options() {
     CONFIG_NF_CONNTRACK
     CONFIG_NF_NAT
     CONFIG_IP_NF_IPTABLES
-    CONFIG_IP_NF_NAT
     CONFIG_IP_NF_TARGET_MASQUERADE
     CONFIG_BRIDGE
     CONFIG_BRIDGE_NETFILTER

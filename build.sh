@@ -46,6 +46,7 @@ if $NON_INTERACTIVE; then
   START_STAGE="${START_STAGE:-1}"
   CLEAN_STATE="${CLEAN_STATE:-false}"
   ARTIFACT_ACTION="${ARTIFACT_ACTION:-a}"
+  USE_BINPKG="${USE_BINPKG:-true}"
 else
   echo "============================================================"
   echo " GentooHA Build Launcher"
@@ -93,6 +94,22 @@ else
   [[ "${CLEAN_ANS,,}" == "y" ]] && CLEAN_STATE="true"
 
   echo ""
+  echo "Build method:"
+  echo "  b  - Binary packages (fast, uses Gentoo binary host) [default]"
+  echo "  s  - Compile from source (slow, full control)"
+  echo "  Note: individual packages with custom USE flags always fall back to source."
+  echo ""
+  while true; do
+    read -rp "Build method binary/source (b/s) [b]: " BINPKG_ANS
+    BINPKG_ANS="${BINPKG_ANS:-b}"
+    case "${BINPKG_ANS,,}" in
+      b) USE_BINPKG="true";  break ;;
+      s) USE_BINPKG="false"; break ;;
+      *) echo "Invalid choice. Use: b (binary) or s (source)." ;;
+    esac
+  done
+
+  echo ""
   while true; do
     read -rp "Handle existing artifacts? archive/remove/keep (a/y/n) [a]: " ARTIFACT_ACTION
     ARTIFACT_ACTION="${ARTIFACT_ACTION:-a}"
@@ -110,6 +127,7 @@ else
   echo "   START_STAGE = $START_STAGE"
   echo "   CLEAN_STATE = $CLEAN_STATE"
   echo "   ARTIFACTS   = ${ARTIFACT_ACTION,,} (a=archive, y=remove, n=keep)"
+  echo "   USE_BINPKG  = $USE_BINPKG"
   echo "============================================================"
   echo ""
   read -rp "Proceed? (Y/n) [Y]: " PROCEED
@@ -179,7 +197,7 @@ if [[ "$_ENV" != "windows-bash" ]]; then
   fi
 fi
 
-export PLATFORM FLAVOR START_STAGE CLEAN_STATE ARTIFACT_ACTION
+export PLATFORM FLAVOR START_STAGE CLEAN_STATE ARTIFACT_ACTION USE_BINPKG
 
 # ── Windows path (Git Bash / MSYS2 / Cygwin) ──────────────────────────────
 # build.sh cannot run build stages here; delegate to WSL2.
@@ -202,7 +220,7 @@ if [[ "$_ENV" == "windows-bash" ]]; then
   fi
   echo "[build.sh] WSL distro: $WSL_DISTRO  path: $WSL_PATH"
   wsl -d "$WSL_DISTRO" -- bash -c \
-    "export PLATFORM='$PLATFORM' FLAVOR='$FLAVOR' START_STAGE='$START_STAGE' CLEAN_STATE='$CLEAN_STATE' ARTIFACT_ACTION='$ARTIFACT_ACTION' END_STAGE='${END_STAGE:-}'; cd '$WSL_PATH' && bash build.sh --non-interactive"
+    "export PLATFORM='$PLATFORM' FLAVOR='$FLAVOR' START_STAGE='$START_STAGE' CLEAN_STATE='$CLEAN_STATE' ARTIFACT_ACTION='$ARTIFACT_ACTION' USE_BINPKG='$USE_BINPKG' END_STAGE='${END_STAGE:-}'; cd '$WSL_PATH' && bash build.sh --non-interactive"
   exit $?
 fi
 

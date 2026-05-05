@@ -23,6 +23,7 @@ case "${ARCH:-amd64}" in
 esac
 
 GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/${PORTAGE_ARCH}/23.0/systemd}"
+USE_BINPKG="${USE_BINPKG:-true}"
 TIMEZONE="${TIMEZONE:-UTC}"
 LOCALE="${LOCALE:-en_US.UTF-8 UTF-8}"
 HOSTNAME="${HOSTNAME_OVERRIDE:-ha-gentoo}"
@@ -59,6 +60,18 @@ if [[ -f /etc/portage/make.conf ]]; then
   sed -i -E '/^ARCH=/d' /etc/portage/make.conf
 fi
 printf 'ARCH="%s"\n' '${PORTAGE_ARCH}' >> /etc/portage/make.conf
+
+# Binary package support
+if [[ '${USE_BINPKG}' == 'true' ]]; then
+  echo "[stage3] Configuring binary package host"
+  sed -i -E '/^FEATURES=|^EMERGE_DEFAULT_OPTS=|^PORTAGE_BINHOST=/d' /etc/portage/make.conf
+  printf 'FEATURES="getbinpkg"\n' >> /etc/portage/make.conf
+  printf 'EMERGE_DEFAULT_OPTS="--getbinpkg --binpkg-respect-use=y"\n' >> /etc/portage/make.conf
+  printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
+else
+  echo "[stage3] Binary packages disabled — building from source"
+  sed -i -E '/^FEATURES=.*getbinpkg|^EMERGE_DEFAULT_OPTS=.*getbinpkg|^PORTAGE_BINHOST=/d' /etc/portage/make.conf || true
+fi
 
 if command -v eselect >/dev/null 2>&1; then
   ARCH='${PORTAGE_ARCH}' eselect profile set '${GENTOO_PROFILE}' || true
