@@ -4,27 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: "Target platform"
+        description: Target platform
         required: true
         default: x64
         type: choice
         options: [x64, pi3, pi4, pizero2, bbb, pbv2]
       flavor:
-        description: "Build flavor"
+        description: Build flavor
         required: true
-        default: live
+        default: debug
         type: choice
         options: [live, installer, debug]
-      start_stage:
-        description: "Start from stage (1-11)"
-        required: false
-        default: "1"
-      clean_state:
-        description: "Clean prior stage state"
-        required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
 
   workflow_call:
     inputs:
@@ -43,18 +33,110 @@ on:
         type: string
         default: "false"
 
+permissions:
+  contents: read
+  actions: write
+
 env:
   PLATFORM: ${{ inputs.platform }}
-  FLAVOR:   ${{ inputs.flavor }}
-  START_STAGE: ${{ inputs.start_stage || '1' }}
-  CLEAN_STATE: ${{ inputs.clean_state || 'false' }}
+  FLAVOR: ${{ inputs.flavor }}
 
 jobs:
-  # ── Self-hosted runner (local Windows PC with WSL2) ──────────────────────────
-  build-self-hosted:
-    name: "Build ${{ inputs.platform }}-${{ inputs.flavor }} (self-hosted)"
-    runs-on: [self-hosted, linux, x64]
-    continue-on-error: true
+  stage1:
+    name: stage1 - base bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Run stage1 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=1 END_STAGE=1 CLEAN_STATE=true bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage1
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage1.tar.zst
+
+      - name: Upload rootfs stage1 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage1
+          path: |
+            /tmp/rootfs-stage1.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage2:
+    name: stage2 - base system config
+    runs-on: ubuntu-latest
+    needs: stage1
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage1
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage1
+          path: /tmp
+
+      - name: Restore rootfs from stage1
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage1.tar.zst
+
+      - name: Run stage2 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=2 END_STAGE=2 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage2
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage2.tar.zst
+
+      - name: Upload rootfs stage2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage2
+          path: |
+            /tmp/rootfs-stage2.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage3:
+    name: stage3 - world update and core tools
+    runs-on: ubuntu-latest
+    needs: stage2
     timeout-minutes: 180
     steps:
       - name: Checkout
@@ -62,76 +144,510 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
       - name: Clone HA org repos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
-            bash scripts/repos/clone_home_assistant_org.sh
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
-      - name: Install QEMU binfmt (ARM only)
-        if: ${{ inputs.platform != 'x64' }}
+      - name: Download rootfs from stage2
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage2
+          path: /tmp
+
+      - name: Restore rootfs from stage2
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q qemu-user-static binfmt-support
-          sudo update-binfmts --enable qemu-arm || true
-          sudo update-binfmts --enable qemu-aarch64 || true
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage2.tar.zst
 
-      - name: Run build
+      - name: Run stage3 only
         run: |
-          sudo bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=3 END_STAGE=3 CLEAN_STATE=false bash build.sh --non-interactive
 
-      - name: Upload artifact
+      - name: Pack rootfs after stage3
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage3.tar.zst
+
+      - name: Upload rootfs stage3 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "gentooha-${{ inputs.platform }}-${{ inputs.flavor }}"
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage3
           path: |
-            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
+            /tmp/rootfs-stage3.tar.zst
+            /tmp/rootfs_meta.txt
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
 
-  # ── GitHub-hosted fallback (Linux, no WSL) ───────────────────────────────────
-  build-github-hosted:
-    name: "Build ${{ inputs.platform }}-${{ inputs.flavor }} (github-hosted)"
-    needs: build-self-hosted
-    if: ${{ failure() || needs.build-self-hosted.result == 'failure' }}
+  stage4:
+    name: stage4 - supervised prerequisites
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    needs: stage3
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
       - name: Clone HA org repos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
-            bash scripts/repos/clone_home_assistant_org.sh
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
-      - name: Install build dependencies
+      - name: Download rootfs from stage3
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage3
+          path: /tmp
+
+      - name: Restore rootfs from stage3
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
-            dosfstools parted kpartx rsync \
-            qemu-user-static binfmt-support \
-            gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            debootstrap schroot
-          sudo update-binfmts --enable qemu-arm    || true
-          sudo update-binfmts --enable qemu-aarch64 || true
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage3.tar.zst
 
-      - name: Run build
+      - name: Run stage4 only
         run: |
-          sudo bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=4 END_STAGE=4 CLEAN_STATE=false bash build.sh --non-interactive
 
-      - name: Upload artifact
+      - name: Pack rootfs after stage4
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage4.tar.zst
+
+      - name: Upload rootfs stage4 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "gentooha-${{ inputs.platform }}-${{ inputs.flavor }}"
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage4
+          path: |
+            /tmp/rootfs-stage4.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage5:
+    name: stage5 - supervisor+agent packages
+    runs-on: ubuntu-latest
+    needs: stage4
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage4
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage4
+          path: /tmp
+
+      - name: Restore rootfs from stage4
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage4.tar.zst
+
+      - name: Run stage5 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=5 END_STAGE=5 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage5
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage5.tar.zst
+
+      - name: Upload rootfs stage5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage5
+          path: |
+            /tmp/rootfs-stage5.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage6:
+    name: stage6 - kernel build
+    runs-on: ubuntu-latest
+    needs: stage5
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils \
+            gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage5
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage5
+          path: /tmp
+
+      - name: Restore rootfs from stage5
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage5.tar.zst
+
+      - name: Run stage6 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=6 END_STAGE=6 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage6
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage6.tar.zst
+
+      - name: Upload rootfs stage6 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage6
+          path: |
+            /tmp/rootfs-stage6.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage7:
+    name: stage7 - kernel install and boot config
+    runs-on: ubuntu-latest
+    needs: stage6
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage6
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage6
+          path: /tmp
+
+      - name: Restore rootfs from stage6
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage6.tar.zst
+
+      - name: Run stage7 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=7 END_STAGE=7 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage7
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage7.tar.zst
+
+      - name: Upload rootfs stage7 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage7
+          path: |
+            /tmp/rootfs-stage7.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage8:
+    name: stage8 - HA OS layering
+    runs-on: ubuntu-latest
+    needs: stage7
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage7
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage7
+          path: /tmp
+
+      - name: Restore rootfs from stage7
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage7.tar.zst
+
+      - name: Run stage8 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=8 END_STAGE=8 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage8
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage8.tar.zst
+
+      - name: Upload rootfs stage8 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage8
+          path: |
+            /tmp/rootfs-stage8.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage9:
+    name: stage9 - apparmor userspace
+    runs-on: ubuntu-latest
+    needs: stage8
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage8
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage8
+          path: /tmp
+
+      - name: Restore rootfs from stage8
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage8.tar.zst
+
+      - name: Run stage9 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=9 END_STAGE=9 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage9
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage9.tar.zst
+
+      - name: Upload rootfs stage9 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage9
+          path: |
+            /tmp/rootfs-stage9.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage10:
+    name: stage10 - internal cleanup
+    runs-on: ubuntu-latest
+    needs: stage9
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage9
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage9
+          path: /tmp
+
+      - name: Restore rootfs from stage9
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage9.tar.zst
+
+      - name: Run stage10 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=10 END_STAGE=10 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage10
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage10.tar.zst
+
+      - name: Upload rootfs stage10 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage10
+          path: |
+            /tmp/rootfs-stage10.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage11:
+    name: stage11 - external artifact build
+    runs-on: ubuntu-latest
+    needs: stage10
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils \
+            xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
+            dosfstools parted kpartx syslinux-common debootstrap
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage10
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage10
+          path: /tmp
+
+      - name: Restore rootfs from stage10
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage10.tar.zst
+
+      - name: Run stage11 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=11 END_STAGE=11 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Pack rootfs after stage11
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage11.tar.zst
+
+      - name: Upload rootfs stage11 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage11
+          path: |
+            /tmp/rootfs-stage11.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  stage12:
+    name: stage12 - manifest + publish artifacts
+    runs-on: ubuntu-latest
+    needs: stage11
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage11
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage11
+          path: /tmp
+
+      - name: Restore rootfs from stage11
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage11.tar.zst
+
+      - name: Run stage12 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=12 END_STAGE=12 CLEAN_STATE=false bash build.sh --non-interactive
+
+      - name: Upload final build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gentooha-${{ inputs.platform }}-${{ inputs.flavor }}
           path: |
             /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
+
+      - name: Upload stage12 manifest bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage12
+          path: |
+            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.manifest.txt
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true

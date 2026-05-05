@@ -7,26 +7,82 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage3
 require_root
 
-GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/amd64/23.0/systemd}"
+case "${ARCH:-amd64}" in
+	x86_64|amd64)
+		PORTAGE_ARCH="amd64"
+		;;
+	arm64|aarch64)
+		PORTAGE_ARCH="arm64"
+		;;
+	arm)
+		PORTAGE_ARCH="arm"
+		;;
+	*)
+		PORTAGE_ARCH="${ARCH:-amd64}"
+		;;
+esac
+
+GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/${PORTAGE_ARCH}/23.0/systemd}"
 TIMEZONE="${TIMEZONE:-UTC}"
 LOCALE="${LOCALE:-en_US.UTF-8 UTF-8}"
 HOSTNAME="${HOSTNAME_OVERRIDE:-ha-gentoo}"
 LANG_NAME="${LOCALE%% *}"
 
 log "Configuring portage and system profile inside chroot"
-run_in_chroot "
+run_in_chroot "$(cat <<CHROOT_STAGE3
 set -euo pipefail
 set +u
 source /etc/profile
 set -u
-emerge-webrsync
+# Initial repository seed can occasionally fail transiently on mirrors.
+SYNC_OK=0
+for attempt in 1 2 3; do
+  echo "[stage3] emerge-webrsync attempt \${attempt}/3"
+  if emerge-webrsync; then
+    SYNC_OK=1
+    break
+  fi
+  echo "[stage3] emerge-webrsync failed; cleaning temporary sync state and retrying"
+  rm -rf /var/db/repos/gentoo/.tmp-unverified-download-quarantine 2>/dev/null || true
+  rm -f /var/db/repos/gentoo/metadata/Manifest.gz 2>/dev/null || true
+  sleep 2
+done
+if [[ "\${SYNC_OK}" -ne 1 ]]; then
+  echo "[stage3] ERROR: emerge-webrsync failed after retries"
+  exit 1
+fi
 if ! command -v eselect >/dev/null 2>&1; then
-	emerge --ask=n app-admin/eselect
+  emerge --ask=n app-admin/eselect
 fi
+mkdir -p /etc/portage
+if [[ -f /etc/portage/make.conf ]]; then
+  sed -i -E '/^ARCH=/d' /etc/portage/make.conf
+fi
+printf 'ARCH="%s"\n' '${PORTAGE_ARCH}' >> /etc/portage/make.conf
+
 if command -v eselect >/dev/null 2>&1; then
-	eselect profile set '${GENTOO_PROFILE}' || true
+  ARCH='${PORTAGE_ARCH}' eselect profile set '${GENTOO_PROFILE}' || true
 fi
-emerge --sync
+# Follow-up sync can fail on transient Manifest mismatch. Retry with cleanup.
+SYNC_OK=0
+for attempt in 1 2 3; do
+  echo "[stage3] emerge --sync attempt \${attempt}/3"
+  if emerge --sync; then
+    SYNC_OK=1
+    break
+  fi
+  echo "[stage3] emerge --sync failed; cleaning temporary sync state and retrying"
+  rm -rf /var/db/repos/gentoo/.tmp-unverified-download-quarantine 2>/dev/null || true
+  rm -f /var/db/repos/gentoo/metadata/Manifest.gz 2>/dev/null || true
+  if command -v emaint >/dev/null 2>&1; then
+    emaint sync -r gentoo --auto 2>/dev/null || true
+  fi
+  sleep 2
+done
+if [[ "\${SYNC_OK}" -ne 1 ]]; then
+  echo "[stage3] ERROR: emerge --sync failed after retries"
+  exit 1
+fi
 emerge --ask=n -uDN @world
 printf '%s\n' '${TIMEZONE}' > /etc/timezone
 emerge --config sys-libs/timezone-data
@@ -38,12 +94,14 @@ set +u
 source /etc/profile
 set -u
 printf 'hostname=%s\n' '${HOSTNAME}' > /etc/conf.d/hostname
-"
+CHROOT_STAGE3
+)"
 
 log "Enabling baseline services"
-run_in_chroot "
+run_in_chroot "$(cat <<'CHROOT_STAGE3_SERVICES'
 set -euo pipefail
 systemctl enable systemd-networkd systemd-resolved
-"
+CHROOT_STAGE3_SERVICES
+)"
 
 stage_end stage3

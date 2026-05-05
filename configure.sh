@@ -2,6 +2,11 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Clear stage-tracking state so the next build starts from stage 1.
+echo "[configure] Resetting build stage tracking..."
+bash "${ROOT_DIR}/reset.sh" || true
+
 REPOS_ROOT="${ROOT_DIR}/repos/home-assistant"
 CLONE_SCRIPT="${ROOT_DIR}/scripts/repos/clone_home_assistant_org.sh"
 

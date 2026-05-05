@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 stage_start stage7
 require_root
+mount_chroot_fs
 
 log "Configuring bootloader and service ordering"
 run_in_chroot "

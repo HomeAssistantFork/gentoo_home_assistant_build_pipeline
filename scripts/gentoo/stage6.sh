@@ -146,24 +146,53 @@ apply_ha_kernel_options() {
   ./scripts/config --enable CONFIG_AUDIT_TREE
 }
 
+verify_ha_kernel_options() {
+  local cfg="\$1"
+  local -a required=(
+    CONFIG_NETFILTER
+    CONFIG_NF_CONNTRACK
+    CONFIG_NF_NAT
+    CONFIG_IP_NF_IPTABLES
+    CONFIG_IP_NF_NAT
+    CONFIG_IP_NF_TARGET_MASQUERADE
+    CONFIG_BRIDGE
+    CONFIG_BRIDGE_NETFILTER
+    CONFIG_VETH
+    CONFIG_OVERLAY_FS
+  )
+
+  for key in "\${required[@]}"; do
+    grep -qE "^\${key}=[ym]$" "\$cfg" || {
+      echo "Missing required kernel option in \$cfg: \${key} (need =y or =m)" >&2
+      exit 1
+    }
+  done
+}
+
 # Compatibility track: conservative defaults for containerized Supervisor workload.
 make mrproper
 make ${PLATFORM_DEFCONFIG}
+apply_ha_kernel_options
+make olddefconfig
+# Re-apply critical built-in options that olddefconfig may have reverted to =m
 apply_ha_kernel_options
 make olddefconfig
 make -j\$(nproc) LOCALVERSION="-${KERNEL_COMPAT_LABEL}"
 make modules_install
 make install
 cp .config /boot/config-${KERNEL_COMPAT_LABEL}
+verify_ha_kernel_options /boot/config-${KERNEL_COMPAT_LABEL}
 
 # Modern track: start from the compatibility config but keep a distinct kernel label.
 make mrproper
 cp /boot/config-${KERNEL_COMPAT_LABEL} .config
+apply_ha_kernel_options
 make olddefconfig
 make -j\$(nproc) LOCALVERSION="-${KERNEL_MODERN_LABEL}"
 make modules_install
 make install
 cp .config /boot/config-${KERNEL_MODERN_LABEL}
+verify_ha_kernel_options /boot/config-${KERNEL_MODERN_LABEL}
 EOF
 )"
 

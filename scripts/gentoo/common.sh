@@ -84,6 +84,14 @@ stage_start() {
 stage_end() {
   local stage="$1"
   mark_done "$stage"
+  if [[ "$stage" =~ ^stage([0-9]+) ]]; then
+    local num="${BASH_REMATCH[1]}"
+    local prev=0
+    [[ -f "$STATE_ROOT/completed_stage" ]] && prev="$(cat "$STATE_ROOT/completed_stage" 2>/dev/null || echo 0)"
+    if [[ "$num" -gt "$prev" ]]; then
+      echo "$num" > "$STATE_ROOT/completed_stage"
+    fi
+  fi
   log "Completed ${stage}"
 }
 

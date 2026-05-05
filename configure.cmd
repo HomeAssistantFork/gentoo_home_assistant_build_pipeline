@@ -6,6 +6,13 @@ if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 
 echo [configure] Root: %ROOT%
 
+echo [configure] Resetting build stage tracking...
+call "%ROOT%\reset.cmd"
+if %ERRORLEVEL% NEQ 0 (
+    echo [configure] WARNING: reset.cmd failed. Continuing anyway.
+)
+echo.
+
 if exist "%ROOT%\.gitmodules" (
     echo [configure] Detected .gitmodules. Restoring submodules first...
     git -C "%ROOT%" submodule sync --recursive

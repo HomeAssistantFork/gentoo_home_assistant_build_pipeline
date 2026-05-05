@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 stage_start stage5
 require_root
+mount_chroot_fs
 
 log "Creating Supervisor compatibility identity layer"
 chroot_script="$(cat <<'EOF'

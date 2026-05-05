@@ -17,7 +17,8 @@ if exist "%STATE_FILE%" (
 )
 
 echo [INFO] WSL prerequisite script
-echo [INFO] This script WILL delete an existing Debian WSL distro without backup.
+echo [INFO] This script sets up a Debian WSL distro for building GentooHA.
+echo [INFO] Existing Debian distros are reused and never deleted.
 echo.
 
 where wsl >nul 2>nul
@@ -35,28 +36,15 @@ set "EXISTING_DISTRO="
 :foundDistro
 
 if defined EXISTING_DISTRO (
-  echo [WARN] Found existing Debian distro: !EXISTING_DISTRO!
-  choice /C YN /M "Delete this distro now?"
-  if errorlevel 2 (
-    echo [INFO] Aborted by user.
-    exit /b 0
-  )
-
-  echo [INFO] Unregistering distro !EXISTING_DISTRO! ...
-  wsl --unregister "!EXISTING_DISTRO!"
+  echo [INFO] Found existing Debian distro: !EXISTING_DISTRO!
+  echo [INFO] Reusing existing Debian distro.
+) else (
+  echo [INFO] No Debian distro found. Installing Debian from WSL online catalog...
+  wsl --install -d Debian
   if errorlevel 1 (
-    echo [ERROR] Failed to unregister distro !EXISTING_DISTRO!.
+    echo [ERROR] Failed to install Debian. Check output from wsl --install.
     exit /b 1
   )
-) else (
-  echo [INFO] No existing Debian distro found.
-)
-
-echo [INFO] Installing Debian from WSL online catalog...
-wsl --install -d Debian
-if errorlevel 1 (
-  echo [ERROR] Failed to install Debian. Check output from wsl --install.
-  exit /b 1
 )
 
 echo [INFO] Setting Debian to WSL2...

@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 stage_start stage4
 require_root
+mount_chroot_fs
 
 log "Installing container runtime and Supervisor host dependencies"
 run_in_chroot "

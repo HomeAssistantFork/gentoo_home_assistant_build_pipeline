@@ -18,6 +18,15 @@ fi
 
 log "Preparing TARGET_ROOT at $TARGET_ROOT"
 mkdir -p "$TARGET_ROOT"
+
+# Ensure stage2 can extract stage3 cleanly on retries/reruns.
+if [[ -d "$TARGET_ROOT" ]]; then
+  if [[ "$TARGET_ROOT" == "/" || "$TARGET_ROOT" == "." || "$TARGET_ROOT" == "" ]]; then
+    die "Refusing to clean unsafe TARGET_ROOT='$TARGET_ROOT'"
+  fi
+  find "$TARGET_ROOT" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+fi
+
 mkdir -p "$TARGET_ROOT"/{etc,usr,var,boot,home,root,tmp}
 chmod 1777 "$TARGET_ROOT/tmp"
 

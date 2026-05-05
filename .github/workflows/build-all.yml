@@ -14,7 +14,11 @@ on:
         required: false
         default: all
         type: choice
-        options: [all, live, installer]
+        options: [all, live, installer, debug]
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   matrix:
@@ -23,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [x64, pi3, pi4, pizero2, bbb, pbv2]
-        flavor: ${{ fromJSON(inputs.flavor == 'live' && '["live"]' || inputs.flavor == 'installer' && '["installer"]' || '["live","installer"]') }}
+        flavor: ${{ fromJSON(inputs.flavor == 'live' && '["live"]' || inputs.flavor == 'installer' && '["installer"]' || inputs.flavor == 'debug' && '["debug"]' || '["live","installer","debug"]') }}
     uses: ./.github/workflows/build.yml
     with:
       platform: ${{ matrix.platform }}

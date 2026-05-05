@@ -10,25 +10,25 @@ require_cmd sed
 
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-/var/lib/ha-gentoo-hybrid/downloads}"
 ARCH="${ARCH:-amd64}"
-FLAVOR="${FLAVOR:-systemd}"
+# Stage3 init flavor is independent from build artifact flavor (live/installer/debug).
+STAGE3_FLAVOR="${STAGE3_FLAVOR:-systemd}"
 MIRROR_BASE="${MIRROR_BASE:-https://distfiles.gentoo.org/releases}"
 
+# Normalize common architecture aliases used by other build stages.
 case "$ARCH" in
-	amd64|arm64)
+	amd64|x86_64)
+		ARCH_PATH="amd64"
+		;;
+	arm64|aarch64)
+		ARCH_PATH="arm64"
 		;;
 	*)
-		die "Unsupported ARCH: $ARCH (supported: amd64, arm64)"
+		die "Unsupported ARCH: $ARCH (supported: amd64/x86_64, arm64/aarch64)"
 		;;
 esac
 
-if [[ "$ARCH" == "arm64" ]]; then
-	ARCH_PATH="arm64"
-else
-	ARCH_PATH="amd64"
-fi
-
-if [[ "$FLAVOR" != "systemd" && "$FLAVOR" != "openrc" ]]; then
-	die "Unsupported FLAVOR: $FLAVOR (supported: systemd, openrc)"
+if [[ "$STAGE3_FLAVOR" != "systemd" && "$STAGE3_FLAVOR" != "openrc" ]]; then
+	die "Unsupported STAGE3_FLAVOR: $STAGE3_FLAVOR (supported: systemd, openrc)"
 fi
 
 if command -v curl >/dev/null 2>&1; then
@@ -61,7 +61,7 @@ download_file() {
 main() {
 	mkdir -p "$DOWNLOAD_DIR"
 
-	local latest_file="latest-stage3-${ARCH_PATH}-${FLAVOR}.txt"
+	local latest_file="latest-stage3-${ARCH_PATH}-${STAGE3_FLAVOR}.txt"
 	local latest_url="${MIRROR_BASE}/${ARCH_PATH}/autobuilds/${latest_file}"
 
 	log "Fetching stage3 index: $latest_url"
@@ -69,7 +69,7 @@ main() {
 	latest_content="$(fetch_text "$latest_url")"
 
 	local rel_path
-	rel_path="$((printf '%s\n' "$latest_content" | sed -E 's/#.*$//' | grep -E "stage3-${ARCH_PATH}-${FLAVOR}-[0-9]{8}T[0-9]{6}Z\.tar\.xz" | head -n1) || true)"
+	rel_path="$( (printf '%s\n' "$latest_content" | sed -E 's/#.*$//' | grep -E "stage3-${ARCH_PATH}-${STAGE3_FLAVOR}-[0-9]{8}T[0-9]{6}Z\.tar\.xz" | head -n1) || true )"
 
 	[[ -n "$rel_path" ]] || die "Could not parse stage3 tarball path from ${latest_url}"
 
