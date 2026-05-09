@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run.sh — Boot and validate a GentooHA artifact produced by build.sh
-# Supports: WSL2 import+boot (Linux/Windows), VirtualBox VDI boot (x64)
+# Supports: WSL2 import+boot (Linux/Windows), VirtualBox VHD/VDI boot (x64)
 # Usage: bash run.sh [--non-interactive] [platform] [flavor] [start_step]
 
 set -euo pipefail
@@ -72,23 +72,24 @@ fi
 # ── For x64, ask whether to boot in VirtualBox or WSL2 ───────────────────────
 USE_VIRTUALBOX=false
 if [[ "$PLATFORM" == "x64" && "$NON_INTERACTIVE" != true ]]; then
-    read -rp "Boot in VirtualBox VDI (v) or WSL2 import (w)? [v]: " virt_choice
+    read -rp "Boot in VirtualBox disk (v) or WSL2 import (w)? [v]: " virt_choice
     virt_choice="${virt_choice:-v}"
     if [[ "${virt_choice,,}" == "v" ]]; then
         USE_VIRTUALBOX=true
     fi
 elif [[ "$PLATFORM" == "x64" ]]; then
-    # non-interactive: prefer VDI if it exists
-    [[ -f "$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vdi" ]] && USE_VIRTUALBOX=true
+    # non-interactive: prefer VDI, then VHD
+    [[ -f "$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vdi" || -f "$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vhd" ]] && USE_VIRTUALBOX=true
 fi
 
 if [[ "$NON_INTERACTIVE" != true && "$USE_VIRTUALBOX" != true ]]; then
     prompt START_STEP "Start at step (1=import, 2=wsl-conf, 3=iptables, 4=services, 5=validate)" "$START_STEP"
 fi
 
-# ── VirtualBox boot path (x64 VDI) ───────────────────────────────────────────
+# ── VirtualBox boot path (x64 VHD/VDI) ───────────────────────────────────────
 if [[ "$USE_VIRTUALBOX" == true ]]; then
-    VDI="$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vdi"
+    VM_DISK="$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vdi"
+    [[ -f "$VM_DISK" ]] || VM_DISK="$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vhd"
     VBOXMANAGE=""
     for p in "/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe" \
               "/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"; do
@@ -98,8 +99,8 @@ if [[ "$USE_VIRTUALBOX" == true ]]; then
         echo "ERROR: VBoxManage.exe not found. Install VirtualBox or use WSL2 path." >&2
         exit 1
     fi
-    if [[ ! -f "$VDI" ]]; then
-        echo "ERROR: VDI not found: $VDI"
+    if [[ ! -f "$VM_DISK" ]]; then
+        echo "ERROR: VirtualBox disk not found: $SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vhd or .vdi"
         echo "       Run build.sh first to produce the artifact." >&2
         exit 1
     fi
@@ -114,10 +115,12 @@ if [[ "$USE_VIRTUALBOX" == true ]]; then
             --natpf1 "ssh,tcp,,2222,,22"
         "$VBOXMANAGE" storagectl "$VM" --name SATA --add sata --bootable on
     }
-    echo "[VirtualBox] Attaching: $VDI"
-    "$VBOXMANAGE" closemedium disk "$VDI" &>/dev/null || true
+    # VBoxManage.exe needs a Windows-style path, not a WSL /mnt/c path
+    VM_DISK_WIN="$(wslpath -w "$VM_DISK" 2>/dev/null || echo "$VM_DISK")"
+    echo "[VirtualBox] Attaching: $VM_DISK_WIN"
+    "$VBOXMANAGE" closemedium disk "$VM_DISK_WIN" &>/dev/null || true
     "$VBOXMANAGE" storageattach "$VM" --storagectl SATA --port 0 --device 0 \
-        --type hdd --medium "$VDI"
+        --type hdd --medium "$VM_DISK_WIN"
     echo "[VirtualBox] Starting VM (headless)..."
     "$VBOXMANAGE" startvm "$VM" --type headless
     echo ""
@@ -129,12 +132,16 @@ fi
 
 # ── Resolve artifact ──────────────────────────────────────────────────────────
 if [[ "$PLATFORM" == "x64" ]]; then
-    ARTIFACT_EXT="vdi"
+    ARTIFACT_EXT="vhd"
 else
     ARTIFACT_EXT="img"
 fi
 
 ARTIFACT="$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.${ARTIFACT_EXT}"
+if [[ "$PLATFORM" == "x64" && ! -f "$ARTIFACT" ]]; then
+    ALT_ARTIFACT="$SCRIPT_DIR/artifacts/gentooha-${PLATFORM}-${FLAVOR}.vdi"
+    [[ -f "$ALT_ARTIFACT" ]] && ARTIFACT="$ALT_ARTIFACT"
+fi
 
 if [[ ! -f "$ARTIFACT" ]]; then
     echo "WARNING: Artifact not found: $ARTIFACT"

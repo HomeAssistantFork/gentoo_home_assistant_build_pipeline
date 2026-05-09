@@ -1,5 +1,17 @@
 # Gentoo + Home Assistant Hybrid Automation
 
+## Project Context
+
+This GentooHA conversion from Debian has been driven primarily with Copilot AI Autopilot for VS Code, with most work focused on system configuration, orchestration, and compatibility bring-up rather than application code changes.
+
+`GentooHA` naming note: in this project, `HA` does not mean Home Assistant. This effort is an in-progress forking path around the Home Assistant ecosystem, and the same project name should not be reused so the projects remain clearly differentiated.
+
+Future efforts are planned to mirror Home Assistant behavior through a more bare-metal oriented implementation approach.
+
+Another primary objective is to run this stack on Raspberry Pi Green hardware.
+
+Contributing compatible improvements back to the original Home Assistant project remains a primary goal.
+
 This repository contains automation to:
 - Recreate the WSL bootstrap distro (Debian on WSL2).
 - Clone Home Assistant organization repositories.
@@ -7,6 +19,53 @@ This repository contains automation to:
 - Prepare Home Assistant Supervisor compatibility checks.
 - Validate the final Home Assistant stack.
 - Produce a pure-VM live ISO artifact after staged build completion.
+
+## Current Progress (May 2026)
+
+### Verified Working
+
+- Gentoo VM boots from rebuilt debug VDI artifacts.
+- SSH and HA NAT forwarding are configured on VirtualBox (host ports `2222` and `8123`).
+- Kernel-side Supervisor prerequisites for cgroup/BPF were added and validated in built configs:
+	- `CONFIG_BPF_SYSCALL=y`
+	- `CONFIG_CGROUP_BPF=y`
+- Supervisor launch path under Gentoo is now working in the rebuilt image:
+	- `docker.service` reaches `active`
+	- `hassio-supervisor.service` reaches `active`
+	- `hassio_supervisor` container reaches `Up`
+- Prior runtime blocker `bpf_prog_query(BPF_CGROUP_DEVICE) failed: function not implemented` is no longer observed on the current rebuilt artifact.
+- Prior AppArmor label failure path was mitigated for this Gentoo flow by running Supervisor with:
+	- `--security-opt apparmor=unconfined`
+
+### Not Fully Stable Yet
+
+- SSH responsiveness is intermittent in some boots: port `2222` may be open while SSH banner exchange times out.
+- HA web endpoint (`http://127.0.0.1:8123`) can remain slow or timeout from host-side checks even when Supervisor is up.
+- Some stage executions still encounter transient DNS resolution failures while fetching Gentoo packages (`distfiles.gentoo.org`, `packages.gentoo.org`).
+
+### In Progress / Remaining Work
+
+- Harden boot-time service reliability so SSH and UI become consistently responsive after every boot.
+- Confirm end-to-end Home Assistant onboarding through the UI (not only service/container health).
+- Run and archive full validation bundle results for both kernel tracks (`compat` and `modern`).
+- Keep validating that Supervisor startup remains clean across rebuilds and not just a single artifact.
+
+### Next Targeted Validation: Add-ons (Node-RED)
+
+One explicit pending validation is to prove add-on discovery and install flow under Gentoo Supervisor, including Node-RED from the add-on repository.
+
+Planned acceptance checks:
+
+- Home Assistant UI shows add-on store/repositories.
+- Node-RED add-on appears in catalog.
+- Node-RED installs successfully.
+- Node-RED container starts and remains healthy.
+- Restart/reboot persistence is verified.
+
+Suggested verification methods:
+
+- UI path (preferred): install Node-RED from add-on store and verify add-on logs/status.
+- API/CLI path: use Supervisor API checks in `scripts/validation/validate_ha_stack.sh` and `scripts/validation/run_validation_bundle.sh` with `SUPERVISOR_TOKEN` exported.
 
 ## Natural next step:
 

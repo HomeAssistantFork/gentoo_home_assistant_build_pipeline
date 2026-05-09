@@ -13,6 +13,19 @@ mkdir -p "$ARTIFACT_DIR"
 MANIFEST="$ARTIFACT_DIR/gentooha-${PLATFORM}-${FLAVOR}.manifest.txt"
 log "Generating artifact manifest: $MANIFEST"
 
+shopt -s nullglob
+artifacts=("$ARTIFACT_DIR"/gentooha-"$PLATFORM"-"$FLAVOR".*)
+shopt -u nullglob
+
+# Exclude any previous manifest files from the artifact list/checksum set.
+filtered=()
+for f in "${artifacts[@]}"; do
+  [[ "$f" == *.manifest.txt ]] && continue
+  filtered+=("$f")
+done
+
+(( ${#filtered[@]} > 0 )) || die "No artifacts found for ${PLATFORM}/${FLAVOR} in $ARTIFACT_DIR. Stage11 must run before stage12."
+
 {
   echo "platform=$PLATFORM"
   echo "flavor=$FLAVOR"
@@ -22,11 +35,12 @@ log "Generating artifact manifest: $MANIFEST"
   fi
   echo ""
   echo "artifacts:"
-  ls -1 "$ARTIFACT_DIR"/gentooha-"$PLATFORM"-"$FLAVOR".* 2>/dev/null | sed 's/^/  - /' || true
+  for f in "${filtered[@]}"; do
+    echo "  - $f"
+  done
   echo ""
   echo "sha256:"
-  for f in "$ARTIFACT_DIR"/gentooha-"$PLATFORM"-"$FLAVOR".*; do
-    [[ -f "$f" ]] || continue
+  for f in "${filtered[@]}"; do
     sha256sum "$f"
   done
 } > "$MANIFEST"

@@ -10,6 +10,7 @@ mount_chroot_fs
 
 KERNEL_COMPAT_LABEL="${KERNEL_COMPAT_LABEL:-compat}"
 KERNEL_MODERN_LABEL="${KERNEL_MODERN_LABEL:-modern}"
+BUILD_UML_KERNEL="${BUILD_UML_KERNEL:-false}"
 
 # Install cross-compile toolchain on build host if targeting ARM
 if [[ -n "${CROSS_COMPILE:-}" ]] && command -v apt-get >/dev/null 2>&1; then
@@ -48,7 +49,14 @@ set -u
 export ARCH="${CHROOT_ARCH}"
 export CROSS_COMPILE="${CHROOT_CROSS}"
 
-emerge --ask=n --noreplace sys-kernel/gentoo-sources sys-kernel/installkernel
+emerge --ask=n --noreplace sys-kernel/installkernel
+
+if find /usr/src -maxdepth 1 -type d -name 'linux-*' | grep -q .; then
+  emerge --ask=n --noreplace sys-kernel/gentoo-sources
+else
+  echo "No kernel source tree present under /usr/src; reinstalling sys-kernel/gentoo-sources"
+  emerge --ask=n sys-kernel/gentoo-sources
+fi
 
 kernel_src_dir="\$(find /usr/src -maxdepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
 [[ -n "\$kernel_src_dir" ]] || { echo 'No installed kernel sources found' >&2; exit 1; }
@@ -101,6 +109,10 @@ apply_ha_kernel_options() {
   ./scripts/config --enable CONFIG_MEMCG
   ./scripts/config --enable CONFIG_CGROUP_NET_PRIO
   ./scripts/config --enable CONFIG_CGROUP_HUGETLB
+  # Required by runc on cgroup v2 for device policy handling
+  ./scripts/config --enable CONFIG_BPF
+  ./scripts/config --enable CONFIG_BPF_SYSCALL
+  ./scripts/config --enable CONFIG_CGROUP_BPF
   # Seccomp (Docker default seccomp profiles)
   ./scripts/config --enable CONFIG_SECCOMP
   ./scripts/config --enable CONFIG_SECCOMP_FILTER
@@ -152,19 +164,28 @@ verify_ha_kernel_options() {
     CONFIG_NF_CONNTRACK
     CONFIG_NF_NAT
     CONFIG_IP_NF_IPTABLES
-    CONFIG_IP_NF_TARGET_MASQUERADE
     CONFIG_BRIDGE
     CONFIG_BRIDGE_NETFILTER
     CONFIG_VETH
     CONFIG_OVERLAY_FS
+    CONFIG_BPF
+    CONFIG_BPF_SYSCALL
+    CONFIG_CGROUP_BPF
   )
 
   for key in "\${required[@]}"; do
     grep -qE "^\${key}=[ym]$" "\$cfg" || {
       echo "Missing required kernel option in \$cfg: \${key} (need =y or =m)" >&2
-      exit 1
+      return 1
     }
   done
+
+  # Newer kernels may drop CONFIG_IP_NF_TARGET_MASQUERADE while keeping
+  # MASQUERADE support via xtables/nftables targets.
+  if ! grep -qE "^(CONFIG_IP_NF_TARGET_MASQUERADE|CONFIG_NETFILTER_XT_TARGET_MASQUERADE|CONFIG_NFT_MASQ)=[ym]$" "\$cfg"; then
+    echo "Missing MASQUERADE support in \$cfg (need one of CONFIG_IP_NF_TARGET_MASQUERADE, CONFIG_NETFILTER_XT_TARGET_MASQUERADE, CONFIG_NFT_MASQ set to =y or =m)" >&2
+    return 1
+  fi
 }
 
 # Compatibility track: conservative defaults for containerized Supervisor workload.
@@ -191,6 +212,16 @@ make modules_install
 make install
 cp .config /boot/config-${KERNEL_MODERN_LABEL}
 verify_ha_kernel_options /boot/config-${KERNEL_MODERN_LABEL}
+
+if [[ "${BUILD_UML_KERNEL}" == "true" && "${ARCH}" == "x86_64" ]]; then
+  echo "Building optional User-Mode Linux kernel track"
+  make mrproper
+  make ARCH=um defconfig
+  make ARCH=um olddefconfig
+  make -j\$(nproc) ARCH=um linux
+  cp linux /boot/linux-uml
+  cp .config /boot/config-uml
+fi
 EOF
 )"
 

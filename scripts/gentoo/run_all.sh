@@ -22,6 +22,17 @@ if [[ -f "$_MANIFEST" ]]; then
 fi
 unset _MANIFEST _COMPLETED _AUTO_START
 
+# If finalization is requested but artifacts are missing, force stage11 first.
+if [[ "$END_STAGE" -ge 12 && "$START_STAGE" -gt 11 ]]; then
+  _artifact_dir="${ARTIFACT_DIR:-/var/lib/ha-gentoo-hybrid/artifacts}"
+  _artifact_glob="$_artifact_dir/gentooha-${PLATFORM}-${FLAVOR}.*"
+  if ! compgen -G "$_artifact_glob" >/dev/null; then
+    log "No artifacts found for ${PLATFORM}/${FLAVOR} in $_artifact_dir; forcing START_STAGE=11 before stage12."
+    START_STAGE=11
+  fi
+  unset _artifact_dir _artifact_glob
+fi
+
 log "Build config: PLATFORM=$PLATFORM FLAVOR=$FLAVOR ARCH=$ARCH START_STAGE=$START_STAGE END_STAGE=$END_STAGE"
 
 for stage in "${ALL_STAGES[@]}"; do
@@ -38,4 +49,8 @@ for stage in "${ALL_STAGES[@]}"; do
   bash "$SCRIPT_DIR/${stage}.sh"
 done
 
-log "Stages ${START_STAGE}-${END_STAGE} complete. PLATFORM=$PLATFORM FLAVOR=$FLAVOR artifact: gentooha-${PLATFORM}-${FLAVOR}.${ARTIFACT_EXT}"
+if [[ "$PLATFORM" == "x64" ]]; then
+  log "Stages ${START_STAGE}-${END_STAGE} complete. PLATFORM=$PLATFORM FLAVOR=$FLAVOR artifacts: ${X64_ARTIFACT_FORMATS:-${X64_ARTIFACT_FORMAT:-vdi}}"
+else
+  log "Stages ${START_STAGE}-${END_STAGE} complete. PLATFORM=$PLATFORM FLAVOR=$FLAVOR artifact: gentooha-${PLATFORM}-${FLAVOR}.${ARTIFACT_EXT}"
+fi

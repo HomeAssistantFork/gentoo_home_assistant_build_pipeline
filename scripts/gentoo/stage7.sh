@@ -16,13 +16,23 @@ source /etc/profile
 set -u
 
 emerge --ask=n --noreplace sys-boot/grub
-if [[ -d /sys/firmware/efi ]]; then
-  grub-install --target=x86_64-efi --efi-directory=/boot || true
+
+if command -v grub-install >/dev/null 2>&1; then
+  if [[ -d /sys/firmware/efi ]]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot || echo 'WARN: grub-install EFI failed; continuing with image build'
+  else
+    grub-install /dev/sda || echo 'WARN: grub-install BIOS failed; continuing with image build'
+  fi
 else
-  grub-install /dev/sda || true
+  echo 'WARN: grub-install not available in chroot; continuing with image build'
 fi
 
-grub-mkconfig -o /boot/grub/grub.cfg
+if command -v grub-mkconfig >/dev/null 2>&1; then
+  grub-mkconfig -o /boot/grub/grub.cfg || echo 'WARN: grub-mkconfig failed; continuing with image build'
+else
+  echo 'WARN: grub-mkconfig not available in chroot; continuing with image build'
+fi
+
 systemctl enable docker
 systemctl enable ha-os-release-sync.service
 "

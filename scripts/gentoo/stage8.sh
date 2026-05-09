@@ -89,6 +89,17 @@ HASSIOJSON
 # Step 6: Wire up hassio-supervisor startup script substitution variables
 # These placeholder replacements normally happen in postinst — do them here
 log "Patching hassio-supervisor and hassio-apparmor scripts"
+
+DOCKER_CLI_PATH="/usr/bin/docker"
+if [[ ! -x "${TARGET_ROOT}${DOCKER_CLI_PATH}" ]]; then
+    for candidate in /usr/sbin/docker /bin/docker /usr/local/bin/docker; do
+        if [[ -x "${TARGET_ROOT}${candidate}" ]]; then
+            DOCKER_CLI_PATH="${candidate}"
+            break
+        fi
+    done
+fi
+
 for f in \
     "${TARGET_ROOT}/usr/sbin/hassio-supervisor" \
     "${TARGET_ROOT}/usr/sbin/hassio-apparmor" \
@@ -98,13 +109,30 @@ do
     if [[ -f "$f" ]]; then
         sed -i \
             "s|%%HASSIO_CONFIG%%|${HASSIO_CONFIG}|g;
-             s|%%BINARY_DOCKER%%|/usr/bin/docker|g;
+             s|%%BINARY_DOCKER%%|${DOCKER_CLI_PATH}|g;
              s|%%SERVICE_DOCKER%%|docker.service|g;
              s|%%BINARY_HASSIO%%|/usr/sbin/hassio-supervisor|g;
              s|%%HASSIO_APPARMOR_BINARY%%|/usr/sbin/hassio-apparmor|g" \
             "$f"
     fi
 done
+
+# The supervised installer expects an AppArmor profile named
+# "hassio-supervisor" which is not shipped in this Gentoo-based image.
+# Use unconfined mode to avoid startup failure on profile switch.
+if [[ -f "${TARGET_ROOT}/usr/sbin/hassio-supervisor" ]]; then
+    sed -i \
+        -e 's|--security-opt apparmor="hassio-supervisor"|--security-opt apparmor=unconfined|g' \
+        -e 's|--security-opt apparmor=hassio-supervisor|--security-opt apparmor=unconfined|g' \
+        "${TARGET_ROOT}/usr/sbin/hassio-supervisor"
+fi
+
+# Supervisor units/scripts often assume /usr/bin/docker. Create a compatibility
+# symlink when the CLI lives elsewhere in this image.
+if [[ ! -x "${TARGET_ROOT}/usr/bin/docker" && -x "${TARGET_ROOT}${DOCKER_CLI_PATH}" ]]; then
+    mkdir -p "${TARGET_ROOT}/usr/bin"
+    ln -sfn "${DOCKER_CLI_PATH}" "${TARGET_ROOT}/usr/bin/docker"
+fi
 
 chmod a+x "${TARGET_ROOT}/usr/sbin/hassio-supervisor" 2>/dev/null || true
 chmod a+x "${TARGET_ROOT}/usr/sbin/hassio-apparmor" 2>/dev/null || true
@@ -177,6 +205,14 @@ echo "kernel.dmesg_restrict=0" > "${TARGET_ROOT}/etc/sysctl.d/80-hassio.conf"
 if [[ -f "${DEB_EXTRACT_DIR}/supervised/etc/docker/daemon.json" ]]; then
     mkdir -p "${TARGET_ROOT}/etc/docker"
     cp "${DEB_EXTRACT_DIR}/supervised/etc/docker/daemon.json" "${TARGET_ROOT}/etc/docker/daemon.json"
+    if grep -q '"ip6tables"' "${TARGET_ROOT}/etc/docker/daemon.json"; then
+        sed -i 's/"ip6tables"[[:space:]]*:[[:space:]]*true/"ip6tables": false/g' "${TARGET_ROOT}/etc/docker/daemon.json"
+    fi
+    if ! grep -q '"iptables"' "${TARGET_ROOT}/etc/docker/daemon.json"; then
+        sed -i '/"ip6tables"[[:space:]]*:/a\    "iptables": false,' "${TARGET_ROOT}/etc/docker/daemon.json"
+    else
+        sed -i 's/"iptables"[[:space:]]*:[[:space:]]*true/"iptables": false/g' "${TARGET_ROOT}/etc/docker/daemon.json"
+    fi
     log "Installed Docker daemon.json"
 fi
 

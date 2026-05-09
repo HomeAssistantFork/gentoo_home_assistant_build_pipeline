@@ -9,6 +9,8 @@ TARGET_ROOT="${TARGET_ROOT:-/mnt/gentoo}"
 # FLAVOR:   live | installer | debug
 PLATFORM="${PLATFORM:-x64}"
 FLAVOR="${FLAVOR:-live}"
+X64_ARTIFACT_FORMATS="${X64_ARTIFACT_FORMATS:-${X64_ARTIFACT_FORMAT:-vdi}}"
+BUILD_UML_KERNEL="${BUILD_UML_KERNEL:-false}"
 
 case "$FLAVOR" in
   live|installer|debug)
@@ -23,7 +25,16 @@ case "$PLATFORM" in
   x64)
     ARCH="x86_64"
     CROSS_COMPILE=""
-    ARTIFACT_EXT="img"
+    case " $X64_ARTIFACT_FORMATS " in
+      *" vdi "*) ARTIFACT_EXT="vdi" ;;
+      *" vhd "*) ARTIFACT_EXT="vhd" ;;
+      *" iso "*) ARTIFACT_EXT="iso" ;;
+      *" img "*) ARTIFACT_EXT="img" ;;
+      *)
+        echo "ERROR: Unknown X64_ARTIFACT_FORMATS='$X64_ARTIFACT_FORMATS'. Valid tokens: vhd vdi iso img" >&2
+        exit 1
+        ;;
+    esac
     ;;
   pi3|bbb)
     ARCH="arm"
@@ -41,7 +52,9 @@ case "$PLATFORM" in
     ;;
 esac
 
-export PLATFORM FLAVOR ARCH CROSS_COMPILE ARTIFACT_EXT
+X64_ARTIFACT_FORMAT="$X64_ARTIFACT_FORMATS"
+
+export PLATFORM FLAVOR ARCH CROSS_COMPILE ARTIFACT_EXT X64_ARTIFACT_FORMAT X64_ARTIFACT_FORMATS BUILD_UML_KERNEL
 
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 warn() { log "WARN: $*"; }

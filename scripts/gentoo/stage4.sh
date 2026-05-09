@@ -34,6 +34,17 @@ emerge --ask=n --noreplace \
   net-misc/curl \
   dev-vcs/git
 
+# Some Gentoo profiles split the docker CLI into a separate package.
+if ! command -v docker >/dev/null 2>&1; then
+  if ! emerge --ask=n --noreplace app-containers/docker-cli; then
+    emerge --ask=n --noreplace app-containers/moby-cli || true
+  fi
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo 'WARNING: docker CLI not found after install attempts; supervisor may fail' >&2
+fi
+
 systemctl enable docker
 "
 

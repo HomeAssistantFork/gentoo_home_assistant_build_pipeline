@@ -1,3 +1,5 @@
 repos/*
 artifacts/*
 manifests/*
+*.log
+null

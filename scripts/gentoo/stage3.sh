@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/common.sh"
 
 stage_start stage3
 require_root
+mount_chroot_fs
 
 case "${ARCH:-amd64}" in
 	x86_64|amd64)
@@ -64,13 +65,42 @@ printf 'ARCH="%s"\n' '${PORTAGE_ARCH}' >> /etc/portage/make.conf
 # Binary package support
 if [[ '${USE_BINPKG}' == 'true' ]]; then
   echo "[stage3] Configuring binary package host"
-  sed -i -E '/^FEATURES=|^EMERGE_DEFAULT_OPTS=|^PORTAGE_BINHOST=/d' /etc/portage/make.conf
+  sed -i -E '/^FEATURES=|^EMERGE_DEFAULT_OPTS=|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf
   printf 'FEATURES="getbinpkg"\n' >> /etc/portage/make.conf
   printf 'EMERGE_DEFAULT_OPTS="--getbinpkg --binpkg-respect-use=y"\n' >> /etc/portage/make.conf
   printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
+  printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
+  mkdir -p /etc/portage/binrepos.conf
+  if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
+    sed -i -E 's/^verify-signature *=.*/verify-signature = false/' /etc/portage/binrepos.conf/gentoo.conf
+  else
+    cat >/etc/portage/binrepos.conf/gentoo.conf <<'EOF'
+[gentoo]
+priority = 1
+sync-uri = https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64
+location = /var/cache/binhost/gentoo
+verify-signature = false
+EOF
+  fi
+  mkdir -p /etc/portage/gnupg
+  chown -R root:root /etc/portage/gnupg
+  chmod 700 /etc/portage/gnupg
+  if command -v getuto >/dev/null 2>&1; then
+    echo "[stage3] Initializing Gentoo binpkg trust"
+    getuto || true
+  else
+    echo "[stage3] WARNING: getuto not available; binpkg signature verification may fail"
+  fi
+  if id -u portage >/dev/null 2>&1; then
+    chown -R portage:portage /etc/portage/gnupg
+  else
+    chown -R root:root /etc/portage/gnupg
+  fi
+  find /etc/portage/gnupg -type d -exec chmod 700 {} +
+  find /etc/portage/gnupg -type f -exec chmod 600 {} +
 else
   echo "[stage3] Binary packages disabled — building from source"
-  sed -i -E '/^FEATURES=.*getbinpkg|^EMERGE_DEFAULT_OPTS=.*getbinpkg|^PORTAGE_BINHOST=/d' /etc/portage/make.conf || true
+  sed -i -E '/^FEATURES=.*getbinpkg|^EMERGE_DEFAULT_OPTS=.*getbinpkg|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
 fi
 
 if command -v eselect >/dev/null 2>&1; then
@@ -97,16 +127,16 @@ if [[ "\${SYNC_OK}" -ne 1 ]]; then
   exit 1
 fi
 emerge --ask=n -uDN @world
-printf '%s\n' '${TIMEZONE}' > /etc/timezone
+printf '%s\n' "${TIMEZONE}" > /etc/timezone
 emerge --config sys-libs/timezone-data
-printf '%s\n' '${LOCALE}' > /etc/locale.gen
+printf '%s\n' "${LOCALE}" > /etc/locale.gen
 locale-gen
-printf 'LANG=%s\n' '${LANG_NAME}' > /etc/env.d/02locale
+printf 'LANG=%s\n' "${LANG_NAME}" > /etc/env.d/02locale
 env-update
 set +u
 source /etc/profile
 set -u
-printf 'hostname=%s\n' '${HOSTNAME}' > /etc/conf.d/hostname
+printf 'hostname=%s\n' "${HOSTNAME}" > /etc/conf.d/hostname
 CHROOT_STAGE3
 )"
 

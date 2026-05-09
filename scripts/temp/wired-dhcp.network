@@ -1,0 +1,7 @@
+[Match]
+Name=en* eth*
+
+[Network]
+DHCP=yes
+LinkLocalAddressing=ipv6
+IPv6AcceptRA=yes

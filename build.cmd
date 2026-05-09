@@ -13,12 +13,48 @@ if %ERRORLEVEL% NEQ 0 (
 )
 echo [build.cmd] Windows environment detected - using WSL2 build path.
 
+:: ── Load persisted config + completed_stage from WSL ─────────────────────
+set "SAVED_PLATFORM="
+set "SAVED_FLAVOR="
+set "SAVED_USE_BINPKG="
+set "SAVED_X64_ARTIFACT_FORMAT="
+set "SAVED_BUILD_UML_KERNEL="
+set "COMPLETED_STAGE=0"
+
+for /f "delims=" %%L in ('wsl -d Debian -u root -- bash -c "source /var/lib/ha-gentoo-hybrid/state/build_config 2>/dev/null; echo SAVED_PLATFORM=${SAVED_PLATFORM:-}; echo SAVED_FLAVOR=${SAVED_FLAVOR:-}; echo SAVED_USE_BINPKG=${SAVED_USE_BINPKG:-}; echo SAVED_X64_ARTIFACT_FORMAT=${SAVED_X64_ARTIFACT_FORMAT:-}; echo SAVED_BUILD_UML_KERNEL=${SAVED_BUILD_UML_KERNEL:-}" 2^>nul') do (
+  set "%%L"
+)
+for /f "delims=" %%S in ('wsl -d Debian -u root -- bash -c "cat /var/lib/ha-gentoo-hybrid/state/completed_stage 2>/dev/null || echo 0" 2^>nul') do set "COMPLETED_STAGE=%%S"
+
+:: Compute default start stage from completed_stage
+set /a DEFAULT_STAGE=%COMPLETED_STAGE%+1
+if %DEFAULT_STAGE% GTR 12 set "DEFAULT_STAGE=12"
+if %DEFAULT_STAGE% LSS 1  set "DEFAULT_STAGE=1"
+
+:: Apply saved defaults (may be empty, prompts will fall back to hardcoded)
+if not "%SAVED_PLATFORM%"=="" set "DEF_PLATFORM=%SAVED_PLATFORM%"
+if "%DEF_PLATFORM%"=="" set "DEF_PLATFORM=x64"
+
+if not "%SAVED_FLAVOR%"=="" set "DEF_FLAVOR=%SAVED_FLAVOR%"
+if "%DEF_FLAVOR%"=="" set "DEF_FLAVOR=installer"
+
+set "DEF_BINPKG=b"
+if /I "%SAVED_USE_BINPKG%"=="false" set "DEF_BINPKG=s"
+
+if "%COMPLETED_STAGE%"=="12" (
+  echo.
+  echo [build.cmd] All 12 stages already completed. Nothing to do.
+  echo             Run reset.cmd to clear stage tracking and rebuild from scratch.
+  pause
+  exit /b 0
+)
+
 echo ============================================================
 echo  GentooHA Build Launcher
 echo ============================================================
 echo.
 echo Platforms:
-echo   x64      - Generic PC / VM  (produces preinstalled .img + .vdi)
+echo   x64      - Generic PC / VM  (supports .vhd, .vdi, .iso, .img)
 echo   pi3      - Raspberry Pi 3   (produces .img)
 echo   pi4      - Raspberry Pi 4   (produces .img)
 echo   pizero2  - Raspberry Pi Zero 2 W  (produces .img)
@@ -28,8 +64,8 @@ echo.
 
 :ask_platform
 set "PLATFORM="
-set /P PLATFORM="Platform [x64]: "
-if "%PLATFORM%"=="" set "PLATFORM=x64"
+set /P PLATFORM="Platform [%DEF_PLATFORM%]: "
+if "%PLATFORM%"=="" set "PLATFORM=%DEF_PLATFORM%"
 if /I "%PLATFORM%"=="x64"     goto platform_ok
 if /I "%PLATFORM%"=="pi3"     goto platform_ok
 if /I "%PLATFORM%"=="pi4"     goto platform_ok
@@ -49,8 +85,8 @@ echo.
 
 :ask_flavor
 set "FLAVOR="
-set /P FLAVOR="Flavor [installer]: "
-if "%FLAVOR%"=="" set "FLAVOR=installer"
+set /P FLAVOR="Flavor [%DEF_FLAVOR%]: "
+if "%FLAVOR%"=="" set "FLAVOR=%DEF_FLAVOR%"
 if /I "%FLAVOR%"=="live"      goto flavor_ok
 if /I "%FLAVOR%"=="installer" goto flavor_ok
 if /I "%FLAVOR%"=="debug"     goto flavor_ok
@@ -58,12 +94,32 @@ echo Invalid flavor. Choose: live  installer  debug
 goto ask_flavor
 
 :flavor_ok
+if /I "%PLATFORM%"=="x64" (
+  echo.
+  if "%SAVED_X64_ARTIFACT_FORMAT%"=="" set "SAVED_X64_ARTIFACT_FORMAT=vhd"
+  set "X64_ARTIFACT_FORMATS="
+  set /P X64_ARTIFACT_FORMATS="Artifact formats (space/comma-delimited: vhd vdi iso img) [%SAVED_X64_ARTIFACT_FORMAT%]: "
+  if "%X64_ARTIFACT_FORMATS%"=="" set "X64_ARTIFACT_FORMATS=%SAVED_X64_ARTIFACT_FORMAT%"
+
+  set "BUILD_UML_KERNEL=false"
+  set "UML_DEFAULT=N"
+  if /I "%SAVED_BUILD_UML_KERNEL%"=="true" set "UML_DEFAULT=Y"
+  set "BUILD_UML_ANS=%UML_DEFAULT%"
+  set /P BUILD_UML_ANS="Build optional User-Mode Linux kernel too? (y/N) [%UML_DEFAULT%]: "
+  if /I "%BUILD_UML_ANS%"=="y" set "BUILD_UML_KERNEL=true"
+) else (
+  set "X64_ARTIFACT_FORMATS=img"
+  set "BUILD_UML_KERNEL=false"
+)
+
+echo.
+echo   (Last completed stage: %COMPLETED_STAGE% - default resumes at stage %DEFAULT_STAGE%)
 echo.
 
 :ask_stage
 set "START_STAGE="
-set /P START_STAGE="Start from stage (1-12) [1]: "
-if "%START_STAGE%"=="" set "START_STAGE=1"
+set /P START_STAGE="Start from stage (1-12) [%DEFAULT_STAGE%]: "
+if "%START_STAGE%"=="" set "START_STAGE=%DEFAULT_STAGE%"
 if "%START_STAGE%"=="1"  goto stage_ok
 if "%START_STAGE%"=="2"  goto stage_ok
 if "%START_STAGE%"=="3"  goto stage_ok
@@ -82,11 +138,14 @@ goto ask_stage
 :stage_ok
 echo.
 
-:ask_clean
-set "CLEAN_ANS=N"
-set /P CLEAN_ANS="Clean prior stage state? (y/N) [N]: "
+:: Only ask about cleaning when starting at stage 1
 set "CLEAN_STATE=false"
-if /I "%CLEAN_ANS%"=="y" set "CLEAN_STATE=true"
+if "%START_STAGE%"=="1" (
+  set "CLEAN_ANS=N"
+  set /P CLEAN_ANS="Clean prior stage state? (y/N) [N]: "
+  if /I "%CLEAN_ANS%"=="y" set "CLEAN_STATE=true"
+  echo.
+)
 
 :ask_artifacts
 set "ARTIFACT_ACTION=A"
@@ -103,46 +162,35 @@ goto ask_artifacts
 :ask_binpkg
 echo.
 echo Build method:
-echo   b  - Binary packages (fast, uses Gentoo binary host) [default]
+echo   b  - Binary packages (fast, uses Gentoo binary host)
 echo   s  - Compile from source (slow, full control)
 echo   Note: packages with custom USE flags still fall back to source automatically.
 echo.
-set "BINPKG_ANS=b"
-set /P BINPKG_ANS="Build method binary/source (b/s) [b]: "
-if "%BINPKG_ANS%"=="" set "BINPKG_ANS=b"
-set "USE_BINPKG=true"
-if /I "%BINPKG_ANS%"=="b" set "USE_BINPKG=true"
-if /I "%BINPKG_ANS%"=="s" set "USE_BINPKG=false"
-if /I not "%USE_BINPKG%"=="false" if /I not "%USE_BINPKG%"=="true" (
-  echo Invalid choice. Use: b (binary) or s (source).
-  goto ask_binpkg
+set "BINPKG_ANS="
+set /P BINPKG_ANS="Build method binary/source (b/s) [%DEF_BINPKG%]: "
+if "%BINPKG_ANS%"=="" set "BINPKG_ANS=%DEF_BINPKG%"
+if /I "%BINPKG_ANS%"=="b" (
+  set "USE_BINPKG=true"
+  goto binpkg_ok
 )
+if /I "%BINPKG_ANS%"=="s" (
+  set "USE_BINPKG=false"
+  goto binpkg_ok
+)
+echo Invalid choice. Use: b (binary) or s (source).
+goto ask_binpkg
 
-:: Auto-resume: read completed_stage from WSL state directory
-set "COMPLETED_STAGE=0"
-for /f "delims=" %%S in ('wsl -d Debian -u root -- bash -c "cat /var/lib/ha-gentoo-hybrid/state/completed_stage 2>/dev/null || echo 0" 2^>nul') do set "COMPLETED_STAGE=%%S"
-if "%COMPLETED_STAGE%"=="12" (
-  echo.
-  echo [build.cmd] All 12 stages already completed. Nothing to do.
-  echo             Run reset.cmd to clear stage tracking and rebuild from scratch.
-  pause
-  exit /b 0
-)
-:: Advance START_STAGE if it is at or below the already-completed stage
-set /a AUTO_START=%COMPLETED_STAGE%+1
-if %COMPLETED_STAGE% GTR 0 (
-  if %START_STAGE% LEQ %COMPLETED_STAGE% (
-    echo [build.cmd] Resuming from stage %AUTO_START% ^(completed_stage=%COMPLETED_STAGE%^).
-    set "START_STAGE=%AUTO_START%"
-  )
-)
+:binpkg_ok
 
+:: Auto-resume information already applied above via DEFAULT_STAGE
 echo.
 echo ============================================================
 echo  Build summary
 echo    PLATFORM    = %PLATFORM%
 echo    FLAVOR      = %FLAVOR%
-echo    START_STAGE = %START_STAGE%
+if /I "%PLATFORM%"=="x64" echo    X64_FORMATS = %X64_ARTIFACT_FORMATS%
+if /I "%PLATFORM%"=="x64" echo    UML_KERNEL  = %BUILD_UML_KERNEL%
+echo    START_STAGE = %START_STAGE%  (last completed: %COMPLETED_STAGE%)
 echo    CLEAN_STATE = %CLEAN_STATE%
 echo    ARTIFACTS   = %ARTIFACT_ACTION% (a=archive, y=remove, n=keep)
 echo    USE_BINPKG  = %USE_BINPKG%
@@ -155,10 +203,11 @@ set /P PROCEED="Proceed? (Y/n) [Y]: "
 if /I "%PROCEED%"=="n" ( echo Aborted. & pause & exit /b 0 )
 
 :: Determine WSL distro to use for building
+:: Prefer Debian (apt-based build host) over GentooHA.
 set "WSL_DISTRO="
-wsl -d GentooHA -- echo ok >nul 2>&1 && set "WSL_DISTRO=GentooHA"
+wsl -d Debian -u root -- echo ok >nul 2>&1 && set "WSL_DISTRO=Debian"
 if "%WSL_DISTRO%"=="" (
-  wsl -d Debian -- echo ok >nul 2>&1 && set "WSL_DISTRO=Debian"
+  wsl -d GentooHA -u root -- echo ok >nul 2>&1 && set "WSL_DISTRO=GentooHA"
 )
 if "%WSL_DISTRO%"=="" (
   echo ERROR: No suitable WSL distro found. Need GentooHA or Debian.
@@ -187,7 +236,7 @@ if "%WSL_PATH%"=="" (
 :: Strip trailing slash
 if "%WSL_PATH:~-1%"=="/" set "WSL_PATH=%WSL_PATH:~0,-1%"
 
-wsl -d %WSL_DISTRO% -- bash -c "export PLATFORM=%PLATFORM% FLAVOR=%FLAVOR% START_STAGE=%START_STAGE% CLEAN_STATE=%CLEAN_STATE% ARTIFACT_ACTION=%ARTIFACT_ACTION% USE_BINPKG=%USE_BINPKG%; cd '%WSL_PATH%'; bash build.sh --non-interactive"
+wsl -d %WSL_DISTRO% -u root -- bash -c "export PLATFORM=%PLATFORM% FLAVOR=%FLAVOR% START_STAGE=%START_STAGE% CLEAN_STATE=%CLEAN_STATE% ARTIFACT_ACTION=%ARTIFACT_ACTION% USE_BINPKG=%USE_BINPKG% X64_ARTIFACT_FORMATS='%X64_ARTIFACT_FORMATS%' BUILD_UML_KERNEL=%BUILD_UML_KERNEL%; cd '%WSL_PATH%'; bash build.sh --non-interactive"
 if %ERRORLEVEL% NEQ 0 (
   echo.
   echo ERROR: Build failed. See output above.
@@ -207,7 +256,11 @@ if /I "%PLATFORM%"=="x64" (
 
 echo.
 echo Build complete.
-echo Artifacts: gentooha-%PLATFORM%-%FLAVOR%.img and gentooha-%PLATFORM%-%FLAVOR%.vdi
+if /I "%PLATFORM%"=="x64" (
+  echo Artifacts selected: %X64_ARTIFACT_FORMATS%
+) else (
+  echo Artifact: gentooha-%PLATFORM%-%FLAVOR%.img
+)
 echo Location: %WIN_PATH%artifacts\ and /var/lib/ha-gentoo-hybrid/artifacts/ inside WSL
 echo.
 pause
