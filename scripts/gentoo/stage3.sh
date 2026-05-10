@@ -42,6 +42,8 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
+# Ensure required directories exist (may be absent in a minimal stage3 tarball)
+mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /var/cache/binhost
 # Initial repository seed can occasionally fail transiently on mirrors.
 SYNC_OK=0
 for attempt in 1 2 3; do
