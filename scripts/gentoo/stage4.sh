@@ -41,7 +41,12 @@ app-containers/docker overlay
 EOF
 
 # Emerge the meta-package; Portage resolves all sub-packages as deps.
-emerge --ask=n gentooha/gentooha-alpha
+# Override EMERGE_DEFAULT_OPTS: the make.conf from stage3 sets --usepkgonly for
+# ARM qemu safety, but our custom overlay packages have no binary packages and
+# must be built from source.  --usepkg allows binary packages where available
+# and falls back to source for overlay ebuilds (which are mostly file installs
+# with no compilation except gentooha-os-agent which uses Go).
+EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y gentooha/gentooha-alpha
 
 # Ensure Docker starts on boot.
 systemctl enable docker
