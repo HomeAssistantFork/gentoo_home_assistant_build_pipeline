@@ -91,7 +91,7 @@ printf 'NOCOLOR="true"\n' >> /etc/portage/make.conf
 if [[ '${USE_BINPKG}' == 'true' ]]; then
   echo "[stage3] Configuring binary package host"
   sed -i -E '/^FEATURES=|^EMERGE_DEFAULT_OPTS=|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf
-  printf 'FEATURES="getbinpkg"\n' >> /etc/portage/make.conf
+  printf 'FEATURES="getbinpkg -pty"\n' >> /etc/portage/make.conf
   printf 'EMERGE_DEFAULT_OPTS="--getbinpkg --binpkg-respect-use=y"\n' >> /etc/portage/make.conf
   printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
   printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
@@ -125,7 +125,8 @@ EOF
   find /etc/portage/gnupg -type f -exec chmod 600 {} +
 else
   echo "[stage3] Binary packages disabled — building from source"
-  sed -i -E '/^FEATURES=.*getbinpkg|^EMERGE_DEFAULT_OPTS=.*getbinpkg|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
+  sed -i -E '/^FEATURES=|^EMERGE_DEFAULT_OPTS=.*getbinpkg|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
+  printf 'FEATURES="-pty"\n' >> /etc/portage/make.conf
 fi
 
 mkdir -p /etc/portage/repos.conf
