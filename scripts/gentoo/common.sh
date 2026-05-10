@@ -120,12 +120,22 @@ run_in_chroot() {
   local script="$1"
   case "${ARCH:-}" in
     arm|armv7|armv7a)
-      [[ -x "$TARGET_ROOT/usr/bin/qemu-arm-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-arm-static for ARM chroot execution"
-      chroot "$TARGET_ROOT" /usr/bin/qemu-arm-static /bin/bash -lc "$script"
+      # Prefer binfmt-managed execution when available; fall back to explicit qemu.
+      if chroot "$TARGET_ROOT" /bin/true >/dev/null 2>&1; then
+        chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+      else
+        [[ -x "$TARGET_ROOT/usr/bin/qemu-arm-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-arm-static for ARM chroot execution"
+        chroot "$TARGET_ROOT" /usr/bin/qemu-arm-static /bin/bash -lc "$script"
+      fi
       ;;
     arm64|aarch64)
-      [[ -x "$TARGET_ROOT/usr/bin/qemu-aarch64-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-aarch64-static for ARM64 chroot execution"
-      chroot "$TARGET_ROOT" /usr/bin/qemu-aarch64-static /bin/bash -lc "$script"
+      # Prefer binfmt-managed execution when available; fall back to explicit qemu.
+      if chroot "$TARGET_ROOT" /bin/true >/dev/null 2>&1; then
+        chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+      else
+        [[ -x "$TARGET_ROOT/usr/bin/qemu-aarch64-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-aarch64-static for ARM64 chroot execution"
+        chroot "$TARGET_ROOT" /usr/bin/qemu-aarch64-static /bin/bash -lc "$script"
+      fi
       ;;
     *)
       chroot "$TARGET_ROOT" /bin/bash -lc "$script"
