@@ -92,17 +92,35 @@ if [[ '${USE_BINPKG}' == 'true' ]]; then
   echo "[stage3] Configuring binary package host"
   sed -i -E '/^FEATURES=|^EMERGE_DEFAULT_OPTS=|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf
   printf 'FEATURES="getbinpkg -pty"\n' >> /etc/portage/make.conf
-  printf 'EMERGE_DEFAULT_OPTS="--getbinpkg --binpkg-respect-use=y"\n' >> /etc/portage/make.conf
+
+  BINREPO_SYNC_URI='https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64'
+  EMERGE_OPTS='--getbinpkg --binpkg-respect-use=y'
+  case '${PORTAGE_ARCH}' in
+    arm)
+      BINREPO_SYNC_URI='https://distfiles.gentoo.org/releases/arm/binpackages/23.0/armv7a_hardfp'
+      # qemu-user emulation on CI is unreliable for source builds; prefer binary-only.
+      EMERGE_OPTS='--getbinpkg --usepkgonly --binpkg-respect-use=y'
+      ;;
+    arm64)
+      BINREPO_SYNC_URI='https://distfiles.gentoo.org/releases/arm64/binpackages/23.0/aarch64'
+      EMERGE_OPTS='--getbinpkg --usepkgonly --binpkg-respect-use=y'
+      ;;
+  esac
+
+  printf 'EMERGE_DEFAULT_OPTS="%s"\n' "$EMERGE_OPTS" >> /etc/portage/make.conf
   printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
   printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
   mkdir -p /etc/portage/binrepos.conf
   if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
-    sed -i -E 's/^verify-signature *=.*/verify-signature = false/' /etc/portage/binrepos.conf/gentoo.conf
+    sed -i -E 's|^sync-uri *=.*|sync-uri = '"$BINREPO_SYNC_URI"'|' /etc/portage/binrepos.conf/gentoo.conf
+    sed -i -E 's|^location *=.*|location = /var/cache/binhost/gentoo|' /etc/portage/binrepos.conf/gentoo.conf
+    sed -i -E 's|^priority *=.*|priority = 1|' /etc/portage/binrepos.conf/gentoo.conf
+    sed -i -E 's|^verify-signature *=.*|verify-signature = false|' /etc/portage/binrepos.conf/gentoo.conf
   else
-    cat >/etc/portage/binrepos.conf/gentoo.conf <<'EOF'
+    cat >/etc/portage/binrepos.conf/gentoo.conf <<EOF
 [gentoo]
 priority = 1
-sync-uri = https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64
+sync-uri = $BINREPO_SYNC_URI
 location = /var/cache/binhost/gentoo
 verify-signature = false
 EOF
