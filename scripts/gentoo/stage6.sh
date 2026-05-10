@@ -12,18 +12,6 @@ KERNEL_COMPAT_LABEL="${KERNEL_COMPAT_LABEL:-compat}"
 KERNEL_MODERN_LABEL="${KERNEL_MODERN_LABEL:-modern}"
 BUILD_UML_KERNEL="${BUILD_UML_KERNEL:-false}"
 
-# Install cross-compile toolchain on build host if targeting ARM
-if [[ -n "${CROSS_COMPILE:-}" ]] && command -v apt-get >/dev/null 2>&1; then
-  log "Installing ARM cross-compile toolchain for ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}"
-  apt-get update -y -q
-  if [[ "$ARCH" == "arm64" ]]; then
-    apt-get install -y -q gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-  else
-    apt-get install -y -q gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
-  fi
-  apt-get install -y -q qemu-user-static binfmt-support || true
-fi
-
 # Platform-specific kernel defconfig
 case "${PLATFORM:-x64}" in
   x64)    PLATFORM_DEFCONFIG="defconfig" ;;
