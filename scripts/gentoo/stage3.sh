@@ -117,6 +117,21 @@ masters = gentoo
 auto-sync = no
 EOF
 
+if [[ -f /etc/portage/repos.conf/gentoo.conf ]]; then
+  if grep -q '^sync-openpgp-key-refresh' /etc/portage/repos.conf/gentoo.conf; then
+    sed -i -E 's/^sync-openpgp-key-refresh *=.*/sync-openpgp-key-refresh = false-nowarn/' /etc/portage/repos.conf/gentoo.conf
+  else
+    printf 'sync-openpgp-key-refresh = false-nowarn\n' >> /etc/portage/repos.conf/gentoo.conf
+  fi
+else
+  cat >/etc/portage/repos.conf/gentoo.conf <<'EOF'
+[gentoo]
+sync-uri = https://sync.gentoo.org/git/sync/gentoo-portage.git
+location = /var/db/repos/gentoo
+sync-openpgp-key-refresh = false-nowarn
+EOF
+fi
+
 if command -v eselect >/dev/null 2>&1; then
   ARCH='${PORTAGE_ARCH}' eselect profile set '${GENTOO_PROFILE}' || true
 fi

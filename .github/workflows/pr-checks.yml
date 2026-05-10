@@ -7,7 +7,44 @@ on:
 permissions:
   contents: read
 
+env:
+  PLATFORM: x64
+  FLAVOR: debug
+  X64_ARTIFACT_FORMATS: vdi
+  BUILD_UML_KERNEL: false
+
 jobs:
+  trust-gate:
+    name: Trust Gate
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.gate.outputs.allowed }}
+      author: ${{ steps.gate.outputs.author }}
+    steps:
+      - name: Evaluate PR author
+        id: gate
+        run: |
+          author="$(python3 - <<'PY'
+import json, os
+event = json.load(open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8'))
+login = (event.get('pull_request', {}).get('user', {}).get('login')
+         or event.get('sender', {}).get('login')
+         or '')
+print(login.lower())
+PY
+)"
+          allowed=false
+          case "$author" in
+            tamus|tamusjroyce)
+              allowed=true
+              ;;
+          esac
+
+          echo "author=$author" >> "$GITHUB_OUTPUT"
+          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          echo "PR author: $author"
+          echo "Trusted build allowed: $allowed"
+
   # ── Shell-script syntax validation ──────────────────────────────────────────
   validate-scripts:
     name: Validate Scripts
@@ -25,47 +62,70 @@ jobs:
           bash -n configure.sh
 
   # ── Artifact build smoke-test (x64-live) ────────────────────────────────────
-  # This job mirrors build.yml but is scoped to x64-live as a PR gate.
-  # It will be expanded once the full validation suite is implemented.
   artifact-smoke-test:
-    name: Artifact Smoke Test (x64-live)
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
+    name: Artifact Smoke Test (trusted local x64-debug)
+    needs: trust-gate
+    if: ${{ needs.trust-gate.outputs.allowed == 'true' }}
+    runs-on: [self-hosted, windows, x64]
+    timeout-minutes: 480
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Clone HA org repos
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify WSL Debian is available
+        shell: pwsh
         run: |
-          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false \
-            bash scripts/repos/clone_home_assistant_org.sh
+          wsl -d Debian -u root -- bash -lc 'command -v bash >/dev/null && echo WSL_OK'
 
-      - name: Install build dependencies
+      - name: Run trusted local pipeline
+        shell: pwsh
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            xorriso grub-pc-bin grub-efi-amd64-bin mtools squashfs-tools \
-            dosfstools parted kpartx rsync \
-            debootstrap schroot
+          $workspace = "${{ github.workspace }}"
+          $wslWorkspace = (wsl -d Debian -- wslpath "$workspace").Trim()
+          if ([string]::IsNullOrWhiteSpace($wslWorkspace)) { throw "Unable to translate workspace path to WSL" }
 
-      - name: Run build
-        env:
-          PLATFORM: x64
-          FLAVOR: live
-          START_STAGE: "1"
-          CLEAN_STATE: "false"
+          wsl -d Debian -u root -- bash -lc @"
+set -euo pipefail
+cd '$wslWorkspace'
+CLEAN_STATE=true START_STAGE=1 END_STAGE=13 PLATFORM='$env:PLATFORM' FLAVOR='$env:FLAVOR' X64_ARTIFACT_FORMATS='$env:X64_ARTIFACT_FORMATS' BUILD_UML_KERNEL='$env:BUILD_UML_KERNEL' ARTIFACT_ACTION=y USE_BINPKG=true bash build.sh --non-interactive
+"@
+
+      - name: Stage artifacts for upload
+        shell: pwsh
         run: |
-          sudo bash build.sh --non-interactive
+          $workspace = "${{ github.workspace }}"
+          $staging = Join-Path $workspace ".trusted-pr-artifacts"
+
+          if (Test-Path $staging) {
+            Remove-Item -Recurse -Force $staging
+          }
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+          $wslWorkspace = (wsl -d Debian -- wslpath "$workspace").Trim()
+          $wslStaging = (wsl -d Debian -- wslpath "$staging").Trim()
+          if ([string]::IsNullOrWhiteSpace($wslWorkspace) -or [string]::IsNullOrWhiteSpace($wslStaging)) {
+            throw "Unable to translate workspace or staging path to WSL"
+          }
+
+          wsl -d Debian -u root -- bash -lc @"
+set -euo pipefail
+staging='$wslStaging'
+mkdir -p "\$staging"
+cp -f /var/lib/ha-gentoo-hybrid/artifacts/gentooha-'$env:PLATFORM'-'$env:FLAVOR'.* "\$staging"/
+if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
+  tar -C /mnt/gentoo/var/cache -czf "\$staging/binpkgs-'$env:PLATFORM'-'$env:FLAVOR'.tar.gz" binpkgs
+fi
+"@
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pr-${{ github.event.pull_request.number }}-x64-live
-          path: /var/lib/ha-gentoo-hybrid/artifacts/gentooha-x64-live.*
+          name: pr-${{ github.event.pull_request.number }}-${{ env.PLATFORM }}-${{ env.FLAVOR }}
+          path: |
+            .trusted-pr-artifacts/gentooha-${{ env.PLATFORM }}-${{ env.FLAVOR }}.*
+            .trusted-pr-artifacts/binpkgs-${{ env.PLATFORM }}-${{ env.FLAVOR }}.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -75,21 +135,29 @@ jobs:
   # Run `.github/workflows/setup-branch-protection.yml` once to automate that.
   pr-gate:
     name: PR Gate
-    needs: [validate-scripts, artifact-smoke-test]
+    needs: [trust-gate, validate-scripts, artifact-smoke-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate required checks
         run: |
+          author="${{ needs.trust-gate.outputs.author }}"
+          allowed="${{ needs.trust-gate.outputs.allowed }}"
           validate="${{ needs.validate-scripts.result }}"
           smoke="${{ needs.artifact-smoke-test.result }}"
 
+          echo "trust-gate       : $allowed ($author)"
           echo "validate-scripts   : $validate"
           echo "artifact-smoke-test: $smoke"
 
           if [[ "$validate" != "success" ]]; then
             echo "::error::validate-scripts failed"
             exit 1
+          fi
+
+          if [[ "$allowed" != "true" ]]; then
+            echo "Trusted local build skipped for non-allowlisted author: $author"
+            exit 0
           fi
 
           if [[ "$smoke" != "success" ]]; then
