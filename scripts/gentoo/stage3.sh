@@ -169,17 +169,20 @@ import pathlib
 targets = sorted(pathlib.Path('/usr/lib').glob('python*/site-packages/portage/util/_pty.py'))
 for p in targets:
     txt = p.read_text(encoding='utf-8')
-  marker = '_disable_openpty = platform.system() in ("SunOS",)'
-  if marker in txt:
-    txt = txt.replace(marker, marker + '\n_disable_openpty = True', 1)
-    p.write_text(txt, encoding='utf-8')
-    print(f'[stage3] Forced Portage to disable openpty: {p}')
-    continue
-  if '_disable_openpty = True' not in txt:
-    txt = txt.replace('_fbsd_test_pty = platform.system() == "FreeBSD"',
-              '_disable_openpty = True\n_fbsd_test_pty = platform.system() == "FreeBSD"', 1)
+    marker = '_disable_openpty = platform.system() in ("SunOS",)'
+    if marker in txt:
+        txt = txt.replace(marker, marker + '\n_disable_openpty = True', 1)
         p.write_text(txt, encoding='utf-8')
-    print(f'[stage3] Injected Portage openpty disable: {p}')
+        print(f'[stage3] Forced Portage to disable openpty: {p}')
+        continue
+    if '_disable_openpty = True' not in txt:
+        txt = txt.replace(
+            '_fbsd_test_pty = platform.system() == "FreeBSD"',
+            '_disable_openpty = True\n_fbsd_test_pty = platform.system() == "FreeBSD"',
+            1,
+        )
+        p.write_text(txt, encoding='utf-8')
+        print(f'[stage3] Injected Portage openpty disable: {p}')
 PY
 fi
 
