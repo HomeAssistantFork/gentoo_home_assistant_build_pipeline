@@ -22,8 +22,12 @@ case "$ARCH" in
 	arm64|aarch64)
 		ARCH_PATH="arm64"
 		;;
+	arm|armv7|armv7a)
+		ARCH_PATH="arm"
+		STAGE3_FLAVOR="${STAGE3_FLAVOR_ARM:-systemd-armv7a}"
+		;;
 	*)
-		die "Unsupported ARCH: $ARCH (supported: amd64/x86_64, arm64/aarch64)"
+		die "Unsupported ARCH: $ARCH (supported: amd64/x86_64, arm64/aarch64, arm/armv7a)"
 		;;
 esac
 
@@ -69,7 +73,7 @@ main() {
 	latest_content="$(fetch_text "$latest_url")"
 
 	local rel_path
-	rel_path="$( (printf '%s\n' "$latest_content" | sed -E 's/#.*$//' | grep -E "stage3-${ARCH_PATH}-${STAGE3_FLAVOR}-[0-9]{8}T[0-9]{6}Z\.tar\.xz" | head -n1) || true )"
+	rel_path="$( (printf '%s\n' "$latest_content" | sed -E 's/#.*$//' | grep -E "stage3-[a-z0-9_]+-${STAGE3_FLAVOR}-[0-9]{8}T[0-9]{6}Z\.tar\.xz" | head -n1) || true )"
 
 	[[ -n "$rel_path" ]] || die "Could not parse stage3 tarball path from ${latest_url}"
 
