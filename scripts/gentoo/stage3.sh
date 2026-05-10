@@ -23,7 +23,15 @@ case "${ARCH:-amd64}" in
 		;;
 esac
 
-GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/${PORTAGE_ARCH}/23.0/systemd}"
+case "${PORTAGE_ARCH}" in
+	arm)
+		# arm/23.0/systemd is invalid; use base arm profile (stage3 tarball already sets systemd)
+		GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/arm/23.0}"
+		;;
+	*)
+		GENTOO_PROFILE="${GENTOO_PROFILE:-default/linux/${PORTAGE_ARCH}/23.0/systemd}"
+		;;
+esac
 USE_BINPKG="${USE_BINPKG:-true}"
 TIMEZONE="${TIMEZONE:-UTC}"
 LOCALE="${LOCALE:-en_US.UTF-8 UTF-8}"
@@ -137,26 +145,10 @@ fi
 if command -v eselect >/dev/null 2>&1; then
   ARCH='${PORTAGE_ARCH}' eselect profile set '${GENTOO_PROFILE}' || true
 fi
-# Follow-up sync can fail on transient Manifest mismatch. Retry with cleanup.
-SYNC_OK=0
-for attempt in 1 2 3; do
-  echo "[stage3] emerge --sync attempt \${attempt}/3"
-  if emerge --sync; then
-    SYNC_OK=1
-    break
-  fi
-  echo "[stage3] emerge --sync failed; cleaning temporary sync state and retrying"
-  rm -rf /var/db/repos/gentoo/.tmp-unverified-download-quarantine 2>/dev/null || true
-  rm -f /var/db/repos/gentoo/metadata/Manifest.gz 2>/dev/null || true
-  if command -v emaint >/dev/null 2>&1; then
-    emaint sync -r gentoo --auto 2>/dev/null || true
-  fi
-  sleep 2
-done
-if [[ "\${SYNC_OK}" -ne 1 ]]; then
-  echo "[stage3] ERROR: emerge --sync failed after retries"
-  exit 1
-fi
+# emerge --sync uses git and requires a PTY (termios), which is unavailable in a
+# non-TTY heredoc chroot on CI runners. emerge-webrsync above already seeded a
+# complete tree snapshot, so a follow-up git sync is not needed here.
+echo "[stage3] Skipping emerge --sync (tree seeded by emerge-webrsync)"
 emerge --ask=n -uDN @world
 printf '%s\n' "${TIMEZONE}" > /etc/timezone
 emerge --config sys-libs/timezone-data
