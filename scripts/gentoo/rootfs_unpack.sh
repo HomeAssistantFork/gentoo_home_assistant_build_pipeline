@@ -25,6 +25,30 @@ tar \
   -xpf "$PACK_IN" \
   -C "$(dirname "$TARGET_ROOT")"
 
+# Stage jobs run on fresh runners; re-prepare binfmt/qemu for ARM chroots each time.
+case "${ARCH:-}" in
+  arm|armv7|armv7a)
+    if command -v apt-get >/dev/null 2>&1; then
+      DEBIAN_FRONTEND=noninteractive apt-get -y -q install qemu-user-static binfmt-support >/dev/null
+    fi
+    command -v update-binfmts >/dev/null 2>&1 && update-binfmts --enable qemu-arm 2>/dev/null || true
+    if [[ -x /usr/bin/qemu-arm-static ]]; then
+      mkdir -p "$TARGET_ROOT/usr/bin"
+      cp -f /usr/bin/qemu-arm-static "$TARGET_ROOT/usr/bin/"
+    fi
+    ;;
+  arm64|aarch64)
+    if command -v apt-get >/dev/null 2>&1; then
+      DEBIAN_FRONTEND=noninteractive apt-get -y -q install qemu-user-static binfmt-support >/dev/null
+    fi
+    command -v update-binfmts >/dev/null 2>&1 && update-binfmts --enable qemu-aarch64 2>/dev/null || true
+    if [[ -x /usr/bin/qemu-aarch64-static ]]; then
+      mkdir -p "$TARGET_ROOT/usr/bin"
+      cp -f /usr/bin/qemu-aarch64-static "$TARGET_ROOT/usr/bin/"
+    fi
+    ;;
+esac
+
 log "Mounting chroot virtual filesystems"
 mount_chroot_fs
 
