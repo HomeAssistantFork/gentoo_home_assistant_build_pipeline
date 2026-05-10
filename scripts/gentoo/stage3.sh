@@ -160,31 +160,26 @@ fi
 # complete tree snapshot, so a follow-up git sync is not needed here.
 echo "[stage3] Skipping emerge --sync (tree seeded by emerge-webrsync)"
 
-# qemu-user on CI can raise ENOTTY for tcgetattr on pseudo-terminals.
-# Portage currently treats this as fatal in util/_pty.py; patch it to continue.
+# qemu-user on CI can raise ENOTTY for PTY ioctls. Force Portage to skip
+# openpty and use plain pipes by setting _disable_openpty=True.
 if command -v python3 >/dev/null 2>&1; then
   python3 - <<'PY'
 import pathlib
-import re
 
 targets = sorted(pathlib.Path('/usr/lib').glob('python*/site-packages/portage/util/_pty.py'))
 for p in targets:
     txt = p.read_text(encoding='utf-8')
-    if 'except termios.error:' in txt:
-        continue
-    old = '        mode = termios.tcgetattr(slave_fd)\n'
-    new = (
-        '        try:\n'
-        '            mode = termios.tcgetattr(slave_fd)\n'
-        '        except termios.error:\n'
-        '            mode = None\n'
-    )
-    if old in txt:
-        txt = txt.replace(old, new, 1)
-        txt = txt.replace('        mode[termios.TIOCGWINSZ] = mode[termios.TIOCGWINSZ]\n',
-                          '        if mode is not None:\n            mode[termios.TIOCGWINSZ] = mode[termios.TIOCGWINSZ]\n', 1)
+  marker = '_disable_openpty = platform.system() in ("SunOS",)'
+  if marker in txt:
+    txt = txt.replace(marker, marker + '\n_disable_openpty = True', 1)
+    p.write_text(txt, encoding='utf-8')
+    print(f'[stage3] Forced Portage to disable openpty: {p}')
+    continue
+  if '_disable_openpty = True' not in txt:
+    txt = txt.replace('_fbsd_test_pty = platform.system() == "FreeBSD"',
+              '_disable_openpty = True\n_fbsd_test_pty = platform.system() == "FreeBSD"', 1)
         p.write_text(txt, encoding='utf-8')
-        print(f'[stage3] Patched Portage PTY helper: {p}')
+    print(f'[stage3] Injected Portage openpty disable: {p}')
 PY
 fi
 
