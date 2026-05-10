@@ -17,7 +17,7 @@ HASSIO_CONFIG="/etc/hassio.json"
 case "${PLATFORM:-x64}" in
   x64)          HA_ARCH="amd64" ;;
   pi3|pi4|pbv2) HA_ARCH="aarch64" ;;
-  pizero2)      HA_ARCH="armv7" ;;
+  bbb|pizero2)  HA_ARCH="armv7" ;;
   *)            HA_ARCH="amd64" ;;
 esac
 
