@@ -3,6 +3,9 @@ name: Build All GentooHA Targets
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
+      - 'release-*'
     paths:
       - 'scripts/**'
       - 'overlay/**'
@@ -16,14 +19,14 @@ on:
         default: all
         type: choice
         options: [all, live, installer, debug]
-        publish_release:
-          description: "Publish build artifacts to a GitHub Release"
-          required: false
-          default: false
-          type: boolean
+      publish_release:
+        description: "Publish build artifacts to a GitHub Release"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
-        contents: write
+  contents: write
   actions: write
 
 jobs:
