@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 START_STAGE="${START_STAGE:-1}"
-END_STAGE="${END_STAGE:-12}"
+END_STAGE="${END_STAGE:-13}"
 
-ALL_STAGES=(stage1 stage2 stage3 stage4 stage5 stage6 stage7 stage8 stage9 stage10 stage11 stage12)
+ALL_STAGES=(stage1 stage2 stage3 stage4 stage5 stage6 stage7 stage8 stage9 stage10 stage11 stage12 stage13)
 
 _MANIFEST="$STATE_ROOT/completed_stage"
 if [[ -f "$_MANIFEST" ]]; then
@@ -27,7 +27,7 @@ if [[ "$END_STAGE" -ge 12 && "$START_STAGE" -gt 11 ]]; then
   _artifact_dir="${ARTIFACT_DIR:-/var/lib/ha-gentoo-hybrid/artifacts}"
   _artifact_glob="$_artifact_dir/gentooha-${PLATFORM}-${FLAVOR}.*"
   if ! compgen -G "$_artifact_glob" >/dev/null; then
-    log "No artifacts found for ${PLATFORM}/${FLAVOR} in $_artifact_dir; forcing START_STAGE=11 before stage12."
+    log "No artifacts found for ${PLATFORM}/${FLAVOR} in $_artifact_dir; forcing START_STAGE=11 before stage12+."
     START_STAGE=11
   fi
   unset _artifact_dir _artifact_glob

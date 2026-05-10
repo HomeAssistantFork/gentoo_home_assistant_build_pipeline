@@ -28,7 +28,7 @@ for /f "delims=" %%S in ('wsl -d Debian -u root -- bash -c "cat /var/lib/ha-gent
 
 :: Compute default start stage from completed_stage
 set /a DEFAULT_STAGE=%COMPLETED_STAGE%+1
-if %DEFAULT_STAGE% GTR 12 set "DEFAULT_STAGE=12"
+if %DEFAULT_STAGE% GTR 13 set "DEFAULT_STAGE=13"
 if %DEFAULT_STAGE% LSS 1  set "DEFAULT_STAGE=1"
 
 :: Apply saved defaults (may be empty, prompts will fall back to hardcoded)
@@ -41,16 +41,16 @@ if "%DEF_FLAVOR%"=="" set "DEF_FLAVOR=installer"
 set "DEF_BINPKG=b"
 if /I "%SAVED_USE_BINPKG%"=="false" set "DEF_BINPKG=s"
 
-if "%COMPLETED_STAGE%"=="12" (
+if "%COMPLETED_STAGE%"=="13" (
   echo.
-  echo [build.cmd] All 12 stages already completed. Nothing to do.
+  echo [build.cmd] All 13 stages already completed. Nothing to do.
   echo             Run reset.cmd to clear stage tracking and rebuild from scratch.
   pause
   exit /b 0
 )
 
 echo ============================================================
-echo  GentooHA Build Launcher
+echo  GentooHA Build Launcher (13-Stage Portage-Based Build)
 echo ============================================================
 echo.
 echo Platforms:
@@ -115,10 +115,21 @@ if /I "%PLATFORM%"=="x64" (
 echo.
 echo   (Last completed stage: %COMPLETED_STAGE% - default resumes at stage %DEFAULT_STAGE%)
 echo.
+echo Build Stages Overview:
+echo   1-2:     Base rootfs and package manager setup
+echo   3-4:     Portage overlay registration and Gentooha meta-package emerge
+echo   5:       Compatibility layer and HA stack installation
+echo   6:       Linux kernel build with feature validation (150+ flags enforced)
+echo   7:       Bootloader setup (GRUB)
+echo   8:       Home Assistant Supervisor and os-agent (live ebuilds from fork-first URLs)
+echo   9-11:    Container runtime, AppArmor, and systemd services
+echo   12:      Binary package cache generation for faster rebuilds
+echo   13:      Final artifact manifest and packaging
+echo.
 
 :ask_stage
 set "START_STAGE="
-set /P START_STAGE="Start from stage (1-12) [%DEFAULT_STAGE%]: "
+set /P START_STAGE="Start from stage (1-13) [%DEFAULT_STAGE%]: "
 if "%START_STAGE%"=="" set "START_STAGE=%DEFAULT_STAGE%"
 if "%START_STAGE%"=="1"  goto stage_ok
 if "%START_STAGE%"=="2"  goto stage_ok
@@ -132,7 +143,8 @@ if "%START_STAGE%"=="9"  goto stage_ok
 if "%START_STAGE%"=="10" goto stage_ok
 if "%START_STAGE%"=="11" goto stage_ok
 if "%START_STAGE%"=="12" goto stage_ok
-echo Enter a number from 1 to 12.
+if "%START_STAGE%"=="13" goto stage_ok
+echo Enter a number from 1 to 13.
 goto ask_stage
 
 :stage_ok
@@ -194,6 +206,15 @@ echo    START_STAGE = %START_STAGE%  (last completed: %COMPLETED_STAGE%)
 echo    CLEAN_STATE = %CLEAN_STATE%
 echo    ARTIFACTS   = %ARTIFACT_ACTION% (a=archive, y=remove, n=keep)
 echo    USE_BINPKG  = %USE_BINPKG%
+echo.
+echo  Gentooha Portage Emerges:
+echo    - sys-kernel/gentooha-kernel-config-alpha (validates 150+ kernel features)
+echo    - sys-apps/gentooha-compat (HA host compatibility, os-release, Docker config)
+echo    - sys-apps/gentooha-supervisor-9999 (live ebuild, fork-first GitHub resolution)
+echo    - sys-apps/gentooha-os-agent-9999 (live ebuild, Go-based os-agent)
+echo    - gentooha/gentooha-alpha (meta-package: systemd, docker, apparmor, grub, all deps)
+echo.
+echo  All dependencies resolved via Portage emerge (no manual installation).
 echo ============================================================
 echo.
 

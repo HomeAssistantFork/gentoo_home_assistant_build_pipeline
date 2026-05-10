@@ -15,8 +15,8 @@ set +u
 source /etc/profile
 set -u
 
-emerge --ask=n --noreplace sys-boot/grub
-
+# sys-boot/grub is a dep of gentooha-alpha (emerged in stage4).
+# Just run grub-install and grub-mkconfig here to write boot config.
 if command -v grub-install >/dev/null 2>&1; then
   if [[ -d /sys/firmware/efi ]]; then
     grub-install --target=x86_64-efi --efi-directory=/boot || echo 'WARN: grub-install EFI failed; continuing with image build'

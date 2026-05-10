@@ -82,7 +82,7 @@ If you want, I can now do the second pass and harden stage6 specifically for a t
 - `scripts/windows/prereq_wsl_debian.cmd`
 - `scripts/repos/clone_home_assistant_org.sh`
 - `scripts/gentoo/run_all.sh`
-- `scripts/gentoo/stage1.sh` ... `scripts/gentoo/stage11.sh`
+- `scripts/gentoo/stage1.sh` ... `scripts/gentoo/stage13.sh` (13 build stages)
 - `scripts/compat/preflight_ha_supervisor.sh`
 - `scripts/validation/validate_ha_stack.sh`
 - `scripts/validation/run_validation_bundle.sh`
@@ -148,6 +148,15 @@ sudo bash scripts/gentoo/stage8.sh
 sudo bash scripts/gentoo/stage9.sh
 sudo bash scripts/gentoo/stage10.sh
 sudo bash scripts/gentoo/stage11.sh
+sudo bash scripts/gentoo/stage12.sh
+sudo bash scripts/gentoo/stage13.sh
+```
+
+Or run a range using environment variables:
+
+```bash
+# Run only stages 6-12 (kernel build through binary packages, skip finalization)
+sudo bash -c 'START_STAGE=6 END_STAGE=12 bash scripts/gentoo/run_all.sh'
 ```
 
 ### 4) Run Home Assistant compatibility preflight
@@ -193,6 +202,158 @@ See:
 Artifact output path default:
 
 - `/var/lib/ha-gentoo-hybrid/artifacts/gentooha-live.iso`
+
+## Build Stages Reference
+
+The build pipeline consists of 13 stages, each with a specific role in constructing the Gentoo + Home Assistant image.
+
+### Stage 1: Host Preparation
+**Purpose**: Prepare the Debian WSL host for building  
+**Key Actions**:
+- Install host prerequisites (debootstrap, gdisk, parted, wget, curl, git, rsync, xz-utils, tar)
+- Create and prepare `TARGET_ROOT` directory for the chroot environment
+- Clean up any existing partial chroots to ensure clean state
+
+**Inputs**: None (runs on host)  
+**Outputs**: Empty prepared chroot directory at `TARGET_ROOT`
+
+### Stage 2: Stage3 Extraction
+**Purpose**: Download and extract Gentoo stage3 tarball into the chroot  
+**Key Actions**:
+- Fetch or use existing Gentoo stage3 tarball (x86_64, ARM64, etc.)
+- Extract stage3 into `TARGET_ROOT` to bootstrap the Gentoo system
+- Preserve any existing configuration files
+
+**Inputs**: `STAGE3_TARBALL` path (auto-fetched if not present)  
+**Outputs**: Complete Gentoo base system in `TARGET_ROOT`
+
+### Stage 3: Portage & System Profile
+**Purpose**: Configure Portage and apply base system profile  
+**Key Actions**:
+- Bind-mount `/proc`, `/sys`, `/dev` into chroot
+- Sync Portage tree from Gentoo mirrors
+- Apply default/linux system profile
+- Copy and register local `gentooha` overlay (contains `sys-kernel/gentooha-kernel-config-alpha`)
+- Install systemd-networkd, systemd-resolved as boot services
+- Update entire `@world` package set
+
+**Inputs**: Gentoo stage3 from stage2  
+**Outputs**: Configured Gentoo system with Portage and systemd infrastructure ready
+
+### Stage 4: bootloader & System Tools
+**Purpose**: Install boot-critical tools and bootloader  
+**Key Actions**:
+- Install GRUB2 bootloader and necessary boot tools
+- Configure initramfs generation (dracut)
+- Set up boot partition layout for x64/ARM targets
+
+**Inputs**: Base system from stage3  
+**Outputs**: Bootable system with GRUB and initramfs support
+
+### Stage 5: Device Tree & Board Support
+**Purpose**: Install hardware-specific device tree and board support files  
+**Key Actions**:
+- Install `sys-firmware/linux-firmware` for network and device drivers
+- Extract and install device tree blobs (DTBs) for ARM boards if applicable
+- Configure board-specific boot parameters
+
+**Inputs**: Base system from stage4  
+**Outputs**: System with hardware firmware and device support
+
+### Stage 6: Kernel Build (Dual Track)
+**Purpose**: Build dual kernel tracks (compat and modern) with Home Assistant Supervisor prerequisites  
+**Key Actions**:
+- Install `sys-kernel/gentooha-kernel-config-alpha` package from local overlay
+- Read and apply required kernel flags from package manifest (150+ flags for BPF, cgroups, netfilter, AppArmor, etc.)
+- Build `compat` kernel (conservative settings for compatibility)
+- Build `modern` kernel (latest Gentoo kernel with latest features)
+- Generate boot menu entries for both tracks
+
+**Inputs**: Base system from stage5; kernel sources; local overlay with alpha config package  
+**Outputs**: Two bootable kernels with Supervisor prerequisites (`CONFIG_BPF_SYSCALL`, `CONFIG_CGROUP_BPF`, etc.)
+
+### Stage 7: Services & Daemons
+**Purpose**: Install and configure system services  
+**Key Actions**:
+- Install OpenSSH, syslog services
+- Configure systemd unit files for automatic service startup
+- Set up logging infrastructure
+
+**Inputs**: System from stage6  
+**Outputs**: System with network and logging services ready
+
+### Stage 8: Home Assistant Supervisor & Docker
+**Purpose**: Install Home Assistant Supervisor, Docker, and os-agent  
+**Key Actions**:
+- Download and extract `homeassistant-supervised.deb` package contents
+- Download and extract `os-agent.deb` package contents
+- Install Docker daemon with optimized configuration:
+  - Disable legacy iptables (`iptables=false, ip6tables=false`) for compatibility
+  - Configure log drivers and storage
+- Install systemd unit files for `docker.service` and `hassio-supervisor.service`
+- Apply AppArmor workaround: launch Supervisor with `apparmor=unconfined` to avoid profile lookup failures
+- Configure Supervisor data directory (`/var/lib/homeassistant`)
+
+**Inputs**: System from stage7  
+**Outputs**: Ready-to-boot system with Docker and Supervisor installed
+
+### Stage 9: System Cleanup & Optimization
+**Purpose**: Reduce image size and prepare for artifact generation  
+**Key Actions**:
+- Remove build artifacts and temporary files
+- Clean Portage cache
+- Strip debug symbols from binaries (optional)
+- Remove unnecessary documentation
+
+**Inputs**: System from stage8  
+**Outputs**: Optimized, compact rootfs ready for packaging
+
+### Stage 10: Post-Install Configuration
+**Purpose**: Final system tuning and validation  
+**Key Actions**:
+- Verify critical services are installed and functional
+- Set up any final runtime configurations
+- Generate system manifests or validation checksums
+
+**Inputs**: System from stage9  
+**Outputs**: Fully configured, validated rootfs
+
+### Stage 11: Image Artifact Generation
+**Purpose**: Create bootable VM/appliance images from the rootfs  
+**Key Actions**:
+- Package rootfs into VDI (VirtualBox) format for x64
+- Create alternative formats (ISO, IMG) if specified
+- Configure boot parameters and kernel command-line options
+- Embed both kernel tracks (compat/modern) for boot selection
+- For debug flavor: disable modesetting, enable verbose logging
+
+**Inputs**: Completed rootfs from stage10  
+**Outputs**: Bootable VM artifacts (`*.vdi`, `*.iso`, `*.img`)
+
+### Stage 12: Binary Package Generation
+**Purpose**: Create a cache of compiled binary packages for faster rebuilds  
+**Key Actions**:
+- Mount chroot filesystem
+- Configure Portage with `FEATURES="buildpkg"` enabled
+- Run `emerge --buildpkg=y @world` to precompile all packages as binary `.tbz2` archives
+- Exclude virtual and metadata-only packages
+- Store binaries in `/var/cache/binpkgs/` for reuse by `--getbinpkg` in future builds
+
+**Inputs**: Completed system from stage11  
+**Outputs**: Binary package cache (`.tbz2` files) in `binpkgs/` directory
+
+### Stage 13: Artifact Manifest & Finalization
+**Purpose**: Generate checksums and metadata for all artifacts  
+**Key Actions**:
+- Locate all generated artifacts from stage11 (VDI, ISO, IMG)
+- Generate manifest file listing:
+  - Platform and flavor metadata
+  - Artifact filenames
+  - SHA256 checksums for integrity verification
+- Store manifest as `gentooha-${PLATFORM}-${FLAVOR}.manifest.txt`
+
+**Inputs**: Artifacts from stage11  
+**Outputs**: Manifest file with artifact checksums and metadata
 
 ## What To Commit
 

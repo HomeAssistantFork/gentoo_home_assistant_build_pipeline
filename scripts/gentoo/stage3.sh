@@ -29,6 +29,12 @@ TIMEZONE="${TIMEZONE:-UTC}"
 LOCALE="${LOCALE:-en_US.UTF-8 UTF-8}"
 HOSTNAME="${HOSTNAME_OVERRIDE:-ha-gentoo}"
 LANG_NAME="${LOCALE%% *}"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+log "Installing local gentooha overlay into chroot"
+rm -rf "$TARGET_ROOT/var/db/repos/gentooha"
+mkdir -p "$TARGET_ROOT/var/db/repos/gentooha"
+cp -a "$REPO_ROOT/overlay/." "$TARGET_ROOT/var/db/repos/gentooha/"
 
 log "Configuring portage and system profile inside chroot"
 run_in_chroot "$(cat <<CHROOT_STAGE3
@@ -102,6 +108,14 @@ else
   echo "[stage3] Binary packages disabled — building from source"
   sed -i -E '/^FEATURES=.*getbinpkg|^EMERGE_DEFAULT_OPTS=.*getbinpkg|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
 fi
+
+mkdir -p /etc/portage/repos.conf
+cat >/etc/portage/repos.conf/gentooha.conf <<'EOF'
+[gentooha]
+location = /var/db/repos/gentooha
+masters = gentoo
+auto-sync = no
+EOF
 
 if command -v eselect >/dev/null 2>&1; then
   ARCH='${PORTAGE_ARCH}' eselect profile set '${GENTOO_PROFILE}' || true

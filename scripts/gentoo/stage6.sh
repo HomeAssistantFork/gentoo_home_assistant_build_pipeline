@@ -58,6 +58,8 @@ else
   emerge --ask=n sys-kernel/gentoo-sources
 fi
 
+emerge --ask=n --noreplace sys-kernel/gentooha-kernel-config-alpha
+
 kernel_src_dir="\$(find /usr/src -maxdepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
 [[ -n "\$kernel_src_dir" ]] || { echo 'No installed kernel sources found' >&2; exit 1; }
 ln -sfn "\$kernel_src_dir" /usr/src/linux
@@ -65,6 +67,17 @@ cd /usr/src/linux
 
 # Shared helper: apply all Docker/Supervisor required kernel options.
 apply_ha_kernel_options() {
+  local flag_file="/usr/share/gentooha-kernel-config-alpha/required-flags.conf"
+  if [[ -f "\$flag_file" ]]; then
+    while IFS= read -r config_line; do
+      config_line="\${config_line#\${config_line%%[![:space:]]*}}"
+      [[ -z "\$config_line" || "\${config_line:0:1}" == "#" ]] && continue
+      # shellcheck disable=SC2086
+      ./scripts/config \$config_line
+    done < <(tr -d '\r' < "\$flag_file")
+    return
+  fi
+
   # Overlay filesystem (containers, add-on layers) — built-in
   ./scripts/config --enable CONFIG_OVERLAY_FS
   # Dummy and MACVLAN/IPVLAN (Supervisor network isolation)

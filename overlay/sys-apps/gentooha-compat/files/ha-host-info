@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# GentooHA host info script — reports board/kernel info to Home Assistant Supervisor
+set -euo pipefail
+printf 'board=%s\n' "$(uname -m)"
+printf 'kernel=%s\n' "$(uname -r)"
+printf 'operating_system=%s\n' "Home Assistant Compatible Gentoo"
+printf 'supported=%s\n' "true"
