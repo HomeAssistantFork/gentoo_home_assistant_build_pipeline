@@ -50,8 +50,13 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
+# Portage PTY allocation fails under QEMU user-mode emulation (termios ENOTTY).
+# PORTAGE_BACKGROUND=1 tells SpawnProcess to use plain pipes instead of PTYs.
+export PORTAGE_BACKGROUND=1
+export NOCOLOR="true"
+export TERM="dumb"
 # Ensure required directories exist (may be absent in a minimal stage3 tarball)
-mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /var/cache/binhost
+mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /var/cache/binhost /var/log/portage
 # Initial repository seed can occasionally fail transiently on mirrors.
 SYNC_OK=0
 for attempt in 1 2 3; do
@@ -77,6 +82,10 @@ if [[ -f /etc/portage/make.conf ]]; then
   sed -i -E '/^ARCH=/d' /etc/portage/make.conf
 fi
 printf 'ARCH="%s"\n' '${PORTAGE_ARCH}' >> /etc/portage/make.conf
+# Disable PTY allocation (fails under QEMU ARM emulation in CI)
+sed -i -E '/^PORTAGE_BACKGROUND=|^NOCOLOR=/d' /etc/portage/make.conf || true
+printf 'PORTAGE_BACKGROUND="1"\n' >> /etc/portage/make.conf
+printf 'NOCOLOR="true"\n' >> /etc/portage/make.conf
 
 # Binary package support
 if [[ '${USE_BINPKG}' == 'true' ]]; then
@@ -149,7 +158,7 @@ fi
 # non-TTY heredoc chroot on CI runners. emerge-webrsync above already seeded a
 # complete tree snapshot, so a follow-up git sync is not needed here.
 echo "[stage3] Skipping emerge --sync (tree seeded by emerge-webrsync)"
-emerge --ask=n -uDN @world
+emerge --color n -uDN @world
 printf '%s\n' "${TIMEZONE}" > /etc/timezone
 emerge --config sys-libs/timezone-data
 printf '%s\n' "${LOCALE}" > /etc/locale.gen
