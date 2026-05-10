@@ -204,6 +204,18 @@ for p in targets:
 PY
 fi
 
+# The local gentooha overlay is copied into the chroot at /var/db/repos/gentooha
+# and must have package manifests for Portage to treat it as a valid repo.
+if command -v ebuild >/dev/null 2>&1; then
+  while IFS= read -r -d '' ebuild_file; do
+    pkg_dir="$(dirname "$ebuild_file")"
+    if [[ ! -f "$pkg_dir/Manifest" ]]; then
+      echo "[stage3] Generating manifest for overlay package: $pkg_dir"
+      (cd "$pkg_dir" && ebuild "$(basename "$ebuild_file")" manifest)
+    fi
+  done < <(find /var/db/repos/gentooha -mindepth 2 -maxdepth 2 -name '*.ebuild' -print0)
+fi
+
 if command -v script >/dev/null 2>&1; then
   # Portage may require a PTY for ebuild phase spawning under qemu-user chroots.
   script -q -e -c 'emerge --color n -uDN @world' /dev/null
