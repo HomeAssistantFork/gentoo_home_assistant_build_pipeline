@@ -42,7 +42,6 @@ jobs:
       platform: ${{ matrix.platform }}
       flavor:   ${{ matrix.flavor }}
       start_stage: "1"
-      clean_state: "false"
     secrets: inherit
 
   release:

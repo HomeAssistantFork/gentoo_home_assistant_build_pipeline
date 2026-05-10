@@ -63,10 +63,10 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($wslWorkspace)) { throw "Unable to translate workspace path to WSL" }
 
           wsl -d Debian -u root -- bash -lc @"
-set -euo pipefail
-cd '$wslWorkspace'
-CLEAN_STATE=true START_STAGE=1 END_STAGE=13 PLATFORM='$env:PLATFORM' FLAVOR='$env:FLAVOR' X64_ARTIFACT_FORMATS='$env:X64_ARTIFACT_FORMATS' BUILD_UML_KERNEL='$env:BUILD_UML_KERNEL' ARTIFACT_ACTION=y USE_BINPKG=true bash build.sh --non-interactive
-"@
+          set -euo pipefail
+          cd '$wslWorkspace'
+          CLEAN_STATE=true START_STAGE=1 END_STAGE=13 PLATFORM='$env:PLATFORM' FLAVOR='$env:FLAVOR' X64_ARTIFACT_FORMATS='$env:X64_ARTIFACT_FORMATS' BUILD_UML_KERNEL='$env:BUILD_UML_KERNEL' ARTIFACT_ACTION=y USE_BINPKG=true bash build.sh --non-interactive
+          "@
 
       - name: Stage artifacts for release
         shell: pwsh
@@ -83,14 +83,14 @@ CLEAN_STATE=true START_STAGE=1 END_STAGE=13 PLATFORM='$env:PLATFORM' FLAVOR='$en
           if ([string]::IsNullOrWhiteSpace($wslStaging)) { throw "Unable to translate staging path to WSL" }
 
           wsl -d Debian -u root -- bash -lc @"
-set -euo pipefail
-staging='$wslStaging'
-mkdir -p "\$staging"
-cp -f /var/lib/ha-gentoo-hybrid/artifacts/gentooha-'$env:PLATFORM'-'$env:FLAVOR'.* "\$staging"/
-if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
-  tar -C /mnt/gentoo/var/cache -czf "\$staging/binpkgs-'$env:PLATFORM'-'$env:FLAVOR'.tar.gz" binpkgs
-fi
-"@
+          set -euo pipefail
+          staging='$wslStaging'
+          mkdir -p "\$staging"
+          cp -f /var/lib/ha-gentoo-hybrid/artifacts/gentooha-'$env:PLATFORM'-'$env:FLAVOR'.* "\$staging"/
+          if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
+            tar -C /mnt/gentoo/var/cache -czf "\$staging/binpkgs-'$env:PLATFORM'-'$env:FLAVOR'.tar.gz" binpkgs
+          fi
+          "@
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

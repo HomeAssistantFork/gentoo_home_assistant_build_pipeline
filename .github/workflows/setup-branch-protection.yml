@@ -6,13 +6,13 @@ name: Setup Branch Protection
 #
 # Requirements:
 #   • The actor who triggers this workflow must have admin rights on the repo.
-#   • The GITHUB_TOKEN is automatically granted `administration: write` below.
+#   • Use a token with admin rights via BRANCH_PROTECTION_TOKEN secret.
 
 on:
   workflow_dispatch:
 
 permissions:
-  administration: write
+  contents: read
 
 jobs:
   configure:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Apply branch protection rule
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           curl -fsSL \
             -X PUT \
