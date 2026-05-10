@@ -11,6 +11,7 @@ RESUME="${RESUME:-true}"
 RETRY_COUNT="${RETRY_COUNT:-3}"
 RETRY_DELAY="${RETRY_DELAY:-3}"
 PRIORITY_REPOS="supervisor operating-system core"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
@@ -38,7 +39,15 @@ retry() {
 
 get_page() {
   local page="$1"
-  retry curl -fsSL "https://api.github.com/orgs/${ORG}/repos?per_page=100&page=${page}&type=public"
+  local curl_args=(
+    -fsSL
+    -H 'Accept: application/vnd.github+json'
+    -H 'X-GitHub-Api-Version: 2022-11-28'
+  )
+  if [[ -n "$GITHUB_TOKEN" ]]; then
+    curl_args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  fi
+  retry curl "${curl_args[@]}" "https://api.github.com/orgs/${ORG}/repos?per_page=100&page=${page}&type=public"
 }
 
 clone_or_update_repo() {
