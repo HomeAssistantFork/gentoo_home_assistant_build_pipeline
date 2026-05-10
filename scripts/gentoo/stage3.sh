@@ -158,7 +158,12 @@ fi
 # non-TTY heredoc chroot on CI runners. emerge-webrsync above already seeded a
 # complete tree snapshot, so a follow-up git sync is not needed here.
 echo "[stage3] Skipping emerge --sync (tree seeded by emerge-webrsync)"
-emerge --color n -uDN @world
+if command -v script >/dev/null 2>&1; then
+  # Portage may require a PTY for ebuild phase spawning under qemu-user chroots.
+  script -q -e -c 'emerge --color n -uDN @world' /dev/null
+else
+  emerge --color n -uDN @world
+fi
 printf '%s\n' "${TIMEZONE}" > /etc/timezone
 emerge --config sys-libs/timezone-data
 printf '%s\n' "${LOCALE}" > /etc/locale.gen
