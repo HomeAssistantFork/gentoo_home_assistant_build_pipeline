@@ -26,10 +26,10 @@ set -u
 # may not carry a populated /var/db/repos/gentoo, which leaves Portage unable
 # to resolve profiles or masks.
 mkdir -p /var/db/repos/gentoo /var/db/repos/gentooha /etc/portage/repos.conf
-if [[ ! -d /var/db/repos/gentoo/profiles ]]; then
+[[ -d /var/db/repos/gentoo/profiles ]] || {
 	echo "[stage4] Seeding Gentoo repository metadata"
 	emerge-webrsync
-fi
+}
 
 # Allow live (~9999) and testing ebuilds required by the meta-package.
 mkdir -p /etc/portage/package.accept_keywords
