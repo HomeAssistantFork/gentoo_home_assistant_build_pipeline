@@ -118,5 +118,17 @@ mount_chroot_fs() {
 
 run_in_chroot() {
   local script="$1"
-  chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+  case "${ARCH:-}" in
+    arm|armv7|armv7a)
+      [[ -x "$TARGET_ROOT/usr/bin/qemu-arm-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-arm-static for ARM chroot execution"
+      chroot "$TARGET_ROOT" /usr/bin/qemu-arm-static /bin/bash -lc "$script"
+      ;;
+    arm64|aarch64)
+      [[ -x "$TARGET_ROOT/usr/bin/qemu-aarch64-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-aarch64-static for ARM64 chroot execution"
+      chroot "$TARGET_ROOT" /usr/bin/qemu-aarch64-static /bin/bash -lc "$script"
+      ;;
+    *)
+      chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+      ;;
+  esac
 }
