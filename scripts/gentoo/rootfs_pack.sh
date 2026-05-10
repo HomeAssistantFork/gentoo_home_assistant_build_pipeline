@@ -36,6 +36,9 @@ fi
 log "Packing $TARGET_ROOT -> $PACK_OUT"
 mkdir -p "$(dirname "$PACK_OUT")"
 
+_ROOT_PARENT="$(dirname "$TARGET_ROOT")"
+_ROOT_NAME="$(basename "$TARGET_ROOT")"
+
 _META="$(dirname "$PACK_OUT")/rootfs_meta.txt"
 if [[ -f "$STATE_ROOT/completed_stage" ]]; then
   _COMPLETED_STAGE="$(cat "$STATE_ROOT/completed_stage")"
@@ -47,15 +50,25 @@ fi
 unset _META _COMPLETED_STAGE
 
 tar \
+  --one-file-system \
   --use-compress-program='zstd -T0 -3' \
-  --exclude="${TARGET_ROOT}/proc" \
-  --exclude="${TARGET_ROOT}/sys" \
-  --exclude="${TARGET_ROOT}/dev" \
-  --exclude="${TARGET_ROOT}/run" \
-  --exclude="${TARGET_ROOT}/tmp" \
-  --exclude="${TARGET_ROOT}/var/tmp" \
-  --exclude="${TARGET_ROOT}/var/cache/distfiles" \
+  --exclude="${_ROOT_NAME}/proc" \
+  --exclude="${_ROOT_NAME}/proc/**" \
+  --exclude="${_ROOT_NAME}/sys" \
+  --exclude="${_ROOT_NAME}/sys/**" \
+  --exclude="${_ROOT_NAME}/dev" \
+  --exclude="${_ROOT_NAME}/dev/**" \
+  --exclude="${_ROOT_NAME}/run" \
+  --exclude="${_ROOT_NAME}/run/**" \
+  --exclude="${_ROOT_NAME}/tmp" \
+  --exclude="${_ROOT_NAME}/tmp/**" \
+  --exclude="${_ROOT_NAME}/var/tmp" \
+  --exclude="${_ROOT_NAME}/var/tmp/**" \
+  --exclude="${_ROOT_NAME}/var/cache/distfiles" \
+  --exclude="${_ROOT_NAME}/var/cache/distfiles/**" \
   -cpf "$PACK_OUT" \
-  -C "$(dirname "$TARGET_ROOT")" "$(basename "$TARGET_ROOT")"
+  -C "$_ROOT_PARENT" "$_ROOT_NAME"
+
+unset _ROOT_PARENT _ROOT_NAME
 
 log "Pack complete: $PACK_OUT ($(du -sh "$PACK_OUT" | cut -f1))"
