@@ -159,6 +159,35 @@ fi
 # non-TTY heredoc chroot on CI runners. emerge-webrsync above already seeded a
 # complete tree snapshot, so a follow-up git sync is not needed here.
 echo "[stage3] Skipping emerge --sync (tree seeded by emerge-webrsync)"
+
+# qemu-user on CI can raise ENOTTY for tcgetattr on pseudo-terminals.
+# Portage currently treats this as fatal in util/_pty.py; patch it to continue.
+if command -v python3 >/dev/null 2>&1; then
+  python3 - <<'PY'
+import pathlib
+import re
+
+targets = sorted(pathlib.Path('/usr/lib').glob('python*/site-packages/portage/util/_pty.py'))
+for p in targets:
+    txt = p.read_text(encoding='utf-8')
+    if 'except termios.error:' in txt:
+        continue
+    old = '        mode = termios.tcgetattr(slave_fd)\n'
+    new = (
+        '        try:\n'
+        '            mode = termios.tcgetattr(slave_fd)\n'
+        '        except termios.error:\n'
+        '            mode = None\n'
+    )
+    if old in txt:
+        txt = txt.replace(old, new, 1)
+        txt = txt.replace('        mode[termios.TIOCGWINSZ] = mode[termios.TIOCGWINSZ]\n',
+                          '        if mode is not None:\n            mode[termios.TIOCGWINSZ] = mode[termios.TIOCGWINSZ]\n', 1)
+        p.write_text(txt, encoding='utf-8')
+        print(f'[stage3] Patched Portage PTY helper: {p}')
+PY
+fi
+
 if command -v script >/dev/null 2>&1; then
   # Portage may require a PTY for ebuild phase spawning under qemu-user chroots.
   script -q -e -c 'emerge --color n -uDN @world' /dev/null
