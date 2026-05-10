@@ -16,7 +16,7 @@ case "${ARCH:-amd64}" in
 esac
 
 log "Installing GentooHA alpha meta-package (pulls Docker, AppArmor, Supervisor, os-agent, openssh, grub, and all deps)"
-run_in_chroot "
+run_in_chroot "$(cat <<CHROOT_STAGE4
 set -euo pipefail
 set +u
 source /etc/profile
@@ -59,6 +59,7 @@ systemctl enable docker
 
 # Ensure compat sync service is enabled.
 systemctl enable ha-os-release-sync.service
-"
+CHROOT_STAGE4
+)"
 
 stage_end stage4
