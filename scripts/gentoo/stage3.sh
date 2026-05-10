@@ -107,12 +107,12 @@ if [[ '${USE_BINPKG}' == 'true' ]]; then
       ;;
   esac
 
-  printf 'EMERGE_DEFAULT_OPTS="%s"\n' "$EMERGE_OPTS" >> /etc/portage/make.conf
+  printf 'EMERGE_DEFAULT_OPTS="%s"\n' "\$EMERGE_OPTS" >> /etc/portage/make.conf
   printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
   printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
   mkdir -p /etc/portage/binrepos.conf
   if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
-    sed -i -E 's|^sync-uri *=.*|sync-uri = '"$BINREPO_SYNC_URI"'|' /etc/portage/binrepos.conf/gentoo.conf
+    sed -i -E 's|^sync-uri *=.*|sync-uri = '"\$BINREPO_SYNC_URI"'|' /etc/portage/binrepos.conf/gentoo.conf
     sed -i -E 's|^location *=.*|location = /var/cache/binhost/gentoo|' /etc/portage/binrepos.conf/gentoo.conf
     sed -i -E 's|^priority *=.*|priority = 1|' /etc/portage/binrepos.conf/gentoo.conf
     sed -i -E 's|^verify-signature *=.*|verify-signature = false|' /etc/portage/binrepos.conf/gentoo.conf
@@ -120,7 +120,7 @@ if [[ '${USE_BINPKG}' == 'true' ]]; then
     cat >/etc/portage/binrepos.conf/gentoo.conf <<EOF
 [gentoo]
 priority = 1
-sync-uri = $BINREPO_SYNC_URI
+sync-uri = \$BINREPO_SYNC_URI
 location = /var/cache/binhost/gentoo
 verify-signature = false
 EOF
