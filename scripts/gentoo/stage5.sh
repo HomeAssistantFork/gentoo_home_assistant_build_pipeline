@@ -56,6 +56,7 @@ app-containers/docker ~${PORTAGE_ARCH}
 app-containers/containerd ~${PORTAGE_ARCH}
 app-containers/runc ~${PORTAGE_ARCH}
 app-emulation/qemu ~${PORTAGE_ARCH}
+dev-go/go-md2man ~${PORTAGE_ARCH}
 sys-apps/gentooha-compat **
 EOF
 
