@@ -21,6 +21,13 @@ set +u
 source /etc/profile
 set -u
 
+case "${ARCH:-amd64}" in
+	x86_64|amd64) PORTAGE_ARCH="amd64" ;;
+	arm64|aarch64) PORTAGE_ARCH="arm64" ;;
+	arm) PORTAGE_ARCH="arm" ;;
+	*) PORTAGE_ARCH="${ARCH:-amd64}" ;;
+esac
+
 # Stage artifacts may not retain a populated Gentoo tree or /var/tmp.
 mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /etc/portage/repos.conf
 if [[ ! -d /var/db/repos/gentoo/profiles ]]; then
