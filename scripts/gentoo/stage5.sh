@@ -21,6 +21,10 @@ set +u
 source /etc/profile
 set -u
 
+export PORTAGE_BACKGROUND=1
+export NOCOLOR="true"
+export TERM="dumb"
+
 case "${ARCH:-amd64}" in
 	x86_64|amd64) PORTAGE_ARCH="amd64" ;;
 	arm64|aarch64) PORTAGE_ARCH="arm64" ;;
@@ -48,6 +52,29 @@ if command -v ebuild >/dev/null 2>&1 && [[ ! -f /var/db/repos/gentooha/sys-apps/
 		echo "[stage5] Generating manifest for overlay package: $pkg_dir"
 		(cd "$pkg_dir" && ebuild "$(basename "$ebuild_file")" manifest)
 	done
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+	python3 - <<'PY'
+import pathlib
+
+targets = sorted(pathlib.Path('/usr/lib').glob('python*/site-packages/portage/util/_pty.py'))
+for p in targets:
+		txt = p.read_text(encoding='utf-8')
+		marker = '_disable_openpty = platform.system() in ("SunOS",)'
+		if marker in txt:
+				if '_disable_openpty = True' not in txt:
+						txt = txt.replace(marker, marker + '\n_disable_openpty = True', 1)
+						p.write_text(txt, encoding='utf-8')
+				continue
+		if '_disable_openpty = True' not in txt:
+				txt = txt.replace(
+						'_fbsd_test_pty = platform.system() == "FreeBSD"',
+						'_disable_openpty = True\n_fbsd_test_pty = platform.system() == "FreeBSD"',
+						1,
+				)
+				p.write_text(txt, encoding='utf-8')
+PY
 fi
 
 mkdir -p /etc/portage/package.accept_keywords
