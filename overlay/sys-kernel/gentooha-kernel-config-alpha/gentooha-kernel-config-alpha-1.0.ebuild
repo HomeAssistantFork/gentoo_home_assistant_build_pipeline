@@ -7,6 +7,8 @@ SLOT="0"
 KEYWORDS="~amd64 ~arm ~arm64"
 IUSE=""
 
+S="${WORKDIR}"
+
 RDEPEND="
 	sys-apps/systemd
 	app-containers/docker
