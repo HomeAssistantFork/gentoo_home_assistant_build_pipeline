@@ -213,7 +213,7 @@ if command -v ebuild >/dev/null 2>&1; then
       echo "[stage3] Generating manifest for overlay package: $pkg_dir"
       (cd "$pkg_dir" && ebuild "$(basename "$ebuild_file")" manifest)
     fi
-  done < <(find /var/db/repos/gentooha -mindepth 2 -maxdepth 2 -name '*.ebuild' -print0)
+  done < <(find /var/db/repos/gentooha -mindepth 3 -maxdepth 3 -name '*.ebuild' -print0)
 fi
 
 if command -v script >/dev/null 2>&1; then

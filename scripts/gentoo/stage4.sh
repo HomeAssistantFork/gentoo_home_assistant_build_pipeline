@@ -27,6 +27,13 @@ set -u
 # /var/tmp, which emerge-webrsync needs for temporary files.
 mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /etc/portage/repos.conf
 if [[ ! -d /var/db/repos/gentoo/profiles ]]; then echo "[stage4] Seeding Gentoo repository metadata"; emerge-webrsync; fi
+if command -v ebuild >/dev/null 2>&1 && [[ ! -f /var/db/repos/gentooha/gentooha/gentooha-alpha/Manifest ]]; then
+	find /var/db/repos/gentooha -mindepth 3 -maxdepth 3 -name '*.ebuild' -print0 | while IFS= read -r -d '' ebuild_file; do
+		pkg_dir="$(dirname "$ebuild_file")"
+		echo "[stage4] Generating manifest for overlay package: $pkg_dir"
+		(cd "$pkg_dir" && ebuild "$(basename "$ebuild_file")" manifest)
+	done
+fi
 
 # Allow live (~9999) and testing ebuilds required by the meta-package.
 mkdir -p /etc/portage/package.accept_keywords
