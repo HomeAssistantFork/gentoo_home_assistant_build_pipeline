@@ -44,7 +44,7 @@ if command -v ebuild >/dev/null 2>&1 && [[ ! -f /var/db/repos/gentooha/sys-apps/
 fi
 
 mkdir -p /etc/portage/package.accept_keywords
-cat >/etc/portage/package.accept_keywords/gentooha <<'EOF'
+cat >/etc/portage/package.accept_keywords/gentooha <<EOF
 app-containers/docker ~${PORTAGE_ARCH}
 app-emulation/qemu ~${PORTAGE_ARCH}
 sys-apps/gentooha-compat **
