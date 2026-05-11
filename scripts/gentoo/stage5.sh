@@ -53,6 +53,8 @@ fi
 mkdir -p /etc/portage/package.accept_keywords
 cat >/etc/portage/package.accept_keywords/gentooha <<EOF
 app-containers/docker ~${PORTAGE_ARCH}
+app-containers/containerd ~${PORTAGE_ARCH}
+app-containers/runc ~${PORTAGE_ARCH}
 app-emulation/qemu ~${PORTAGE_ARCH}
 sys-apps/gentooha-compat **
 EOF
