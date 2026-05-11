@@ -56,7 +56,7 @@ fi
 
 if command -v python3 >/dev/null 2>&1; then
 	python3 - <<'PY'
-import pathlib, re
+import pathlib
 
 targets = sorted(pathlib.Path('/usr/lib').glob('python*/site-packages/portage/util/_pty.py'))
 for p in targets:
@@ -80,36 +80,39 @@ for p in targets:
 	else:
 		print(f'[stage5] _disable_openpty already set: {p}')
 
-	# 2. Wrap _create_pty_or_pipe so any termios.error falls back to a plain pipe.
-	#    This guards against qemu-user ENOTTY even when openpty is disabled.
+	# 2. Override _create_pty_or_pipe so any termios.error falls back to a plain
+	#    pipe. Current Portage revisions may not keep a stable function body, so
+	#    append a guarded wrapper instead of trying to replace the definition.
 	GUARD_MARKER = '# [stage5-qemu-guard]'
 	if GUARD_MARKER not in txt:
-		# Find the function definition line and inject a try/except wrapper around
-		# the termios call inside it by replacing the whole function body with a
-		# safe version that catches termios.error.
-		old_fn = 'def _create_pty_or_pipe(copy_term_settings=None):'
-		new_wrapper = (
-			'def _create_pty_or_pipe(copy_term_settings=None):  ' + GUARD_MARKER + '\n'
-			'\timport os as _os\n'
-			'\ttry:\n'
-			'\t\treturn _create_pty_or_pipe_real(copy_term_settings=copy_term_settings)\n'
-			'\texcept Exception:\n'
-			'\t\tr, w = _os.pipe()\n'
-			'\t\treturn False, r, w\n'
-			'\n'
-			'def _create_pty_or_pipe_real(copy_term_settings=None):'
+		txt = txt.rstrip() + (
+			'\n\n'
+			+ GUARD_MARKER + '\n'
+			+ '_create_pty_or_pipe_stage5_orig = _create_pty_or_pipe\n'
+			+ 'def _create_pty_or_pipe(copy_term_settings=None):\n'
+			+ '\timport os as _os\n'
+			+ '\timport termios as _termios\n'
+			+ '\ttry:\n'
+			+ '\t\treturn _create_pty_or_pipe_stage5_orig(copy_term_settings=copy_term_settings)\n'
+			+ '\texcept _termios.error:\n'
+			+ '\t\tr, w = _os.pipe()\n'
+			+ '\t\treturn False, r, w\n'
+			+ '\n'
 		)
-		if old_fn in txt:
-			txt = txt.replace(old_fn, new_wrapper, 1)
-			changed = True
-			print(f'[stage5] Wrapped _create_pty_or_pipe with pipe fallback: {p}')
-		else:
-			print(f'[stage5] WARNING: could not find _create_pty_or_pipe to wrap in {p}')
+		changed = True
+		print(f'[stage5] Appended _create_pty_or_pipe pipe fallback: {p}')
 
 	if changed:
 		p.write_text(txt, encoding='utf-8')
 PY
 fi
+
+if [[ -f /etc/portage/make.conf ]]; then
+	sed -i -E '/^PORTAGE_BACKGROUND=|^NOCOLOR=|^FEATURES=/d' /etc/portage/make.conf || true
+fi
+printf 'PORTAGE_BACKGROUND="1"\n' >> /etc/portage/make.conf
+printf 'NOCOLOR="true"\n' >> /etc/portage/make.conf
+printf 'FEATURES="-pty"\n' >> /etc/portage/make.conf
 
 mkdir -p /etc/portage/package.accept_keywords
 cat >/etc/portage/package.accept_keywords/gentooha <<EOF
@@ -124,11 +127,7 @@ EOF
 # gentooha-compat is pulled as a dep of gentooha-alpha in stage4, but emerge
 # --noreplace makes this a no-op if already installed so the stage is safe to
 # run standalone when skipping stage4.
-if command -v script >/dev/null 2>&1; then
-	script -q -e -c 'EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace sys-apps/gentooha-compat' /dev/null
-else
-	EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace sys-apps/gentooha-compat
-fi
+EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace sys-apps/gentooha-compat
 
 systemctl enable ha-os-release-sync.service
 CHROOT_STAGE5
