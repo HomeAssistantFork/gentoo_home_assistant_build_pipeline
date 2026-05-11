@@ -1,5 +1,7 @@
 EAPI=8
 
+inherit systemd
+
 DESCRIPTION="GentooHA host compatibility layer for Home Assistant Supervisor"
 HOMEPAGE="https://github.com/HomeAssistantFork/home-assistant-1"
 LICENSE="Apache-2.0"
