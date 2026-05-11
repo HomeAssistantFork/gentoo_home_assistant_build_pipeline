@@ -119,7 +119,7 @@ printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
 mkdir -p /etc/portage/binrepos.conf
 if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
 	sed -i -E 's|^location *=.*|location = /var/cache/binhost/gentoo|' /etc/portage/binrepos.conf/gentoo.conf
-+	sed -i -E 's|^priority *=.*|priority = 1|' /etc/portage/binrepos.conf/gentoo.conf
+	sed -i -E 's|^priority *=.*|priority = 1|' /etc/portage/binrepos.conf/gentoo.conf
 	if grep -q '^verify-signature' /etc/portage/binrepos.conf/gentoo.conf; then
 		sed -i -E 's|^verify-signature *=.*|verify-signature = false|' /etc/portage/binrepos.conf/gentoo.conf
 	else
