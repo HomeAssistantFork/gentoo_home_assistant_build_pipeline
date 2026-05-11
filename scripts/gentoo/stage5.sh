@@ -3,10 +3,16 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 stage_start stage5
 require_root
 mount_chroot_fs
+
+log "Refreshing local gentooha overlay in chroot"
+rm -rf "$TARGET_ROOT/var/db/repos/gentooha"
+mkdir -p "$TARGET_ROOT/var/db/repos/gentooha"
+cp -a "$REPO_ROOT/overlay/." "$TARGET_ROOT/var/db/repos/gentooha/"
 
 log "Installing GentooHA compat layer (sys-apps/gentooha-compat)"
 run_in_chroot "$(cat <<'CHROOT_STAGE5'
@@ -21,6 +27,13 @@ if [[ ! -d /var/db/repos/gentoo/profiles ]]; then
 	echo "[stage5] Seeding Gentoo repository metadata"
 	emerge-webrsync
 fi
+
+cat >/etc/portage/repos.conf/gentooha.conf <<'EOF'
+[gentooha]
+location = /var/db/repos/gentooha
+masters = gentoo
+auto-sync = no
+EOF
 
 if command -v ebuild >/dev/null 2>&1 && [[ ! -f /var/db/repos/gentooha/sys-apps/gentooha-compat/Manifest ]]; then
 	find /var/db/repos/gentooha -mindepth 3 -maxdepth 3 -name '*.ebuild' -print0 | while IFS= read -r -d '' ebuild_file; do
