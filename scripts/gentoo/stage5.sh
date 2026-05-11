@@ -108,11 +108,31 @@ PY
 fi
 
 if [[ -f /etc/portage/make.conf ]]; then
-	sed -i -E '/^PORTAGE_BACKGROUND=|^NOCOLOR=|^FEATURES=/d' /etc/portage/make.conf || true
+	sed -i -E '/^PORTAGE_BACKGROUND=|^NOCOLOR=|^FEATURES=|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
 fi
 printf 'PORTAGE_BACKGROUND="1"\n' >> /etc/portage/make.conf
 printf 'NOCOLOR="true"\n' >> /etc/portage/make.conf
 printf 'FEATURES="-pty"\n' >> /etc/portage/make.conf
+printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
+printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
+
+mkdir -p /etc/portage/binrepos.conf
+if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
+	sed -i -E 's|^location *=.*|location = /var/cache/binhost/gentoo|' /etc/portage/binrepos.conf/gentoo.conf
++	sed -i -E 's|^priority *=.*|priority = 1|' /etc/portage/binrepos.conf/gentoo.conf
+	if grep -q '^verify-signature' /etc/portage/binrepos.conf/gentoo.conf; then
+		sed -i -E 's|^verify-signature *=.*|verify-signature = false|' /etc/portage/binrepos.conf/gentoo.conf
+	else
+		printf 'verify-signature = false\n' >> /etc/portage/binrepos.conf/gentoo.conf
+	fi
+else
+	cat >/etc/portage/binrepos.conf/gentoo.conf <<'EOF'
+[gentoo]
+priority = 1
+location = /var/cache/binhost/gentoo
+verify-signature = false
+EOF
+fi
 
 mkdir -p /etc/portage/gnupg
 chown -R root:root /etc/portage/gnupg
