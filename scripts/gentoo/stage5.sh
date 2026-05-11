@@ -56,28 +56,58 @@ fi
 
 if command -v python3 >/dev/null 2>&1; then
 	python3 - <<'PY'
-import pathlib
+import pathlib, re
 
 targets = sorted(pathlib.Path('/usr/lib').glob('python*/site-packages/portage/util/_pty.py'))
 for p in targets:
 	txt = p.read_text(encoding='utf-8')
+	changed = False
+
+	# 1. Force _disable_openpty = True so Portage skips openpty().
 	marker = '_disable_openpty = platform.system() in ("SunOS",)'
-	if marker in txt:
-		if '_disable_openpty = True' not in txt:
-			txt = txt.replace(marker, marker + '\n_disable_openpty = True', 1)
-			p.write_text(txt, encoding='utf-8')
-			print(f'[stage5] Forced Portage to disable openpty: {p}')
-		else:
-			print(f'[stage5] Portage openpty already disabled: {p}')
-		continue
-	if '_disable_openpty = True' not in txt:
+	if marker in txt and '_disable_openpty = True' not in txt:
+		txt = txt.replace(marker, marker + '\n_disable_openpty = True', 1)
+		changed = True
+		print(f'[stage5] Set _disable_openpty=True: {p}')
+	elif '_disable_openpty = True' not in txt:
 		txt = txt.replace(
 			'_fbsd_test_pty = platform.system() == "FreeBSD"',
 			'_disable_openpty = True\n_fbsd_test_pty = platform.system() == "FreeBSD"',
 			1,
 		)
+		changed = True
+		print(f'[stage5] Injected _disable_openpty=True: {p}')
+	else:
+		print(f'[stage5] _disable_openpty already set: {p}')
+
+	# 2. Wrap _create_pty_or_pipe so any termios.error falls back to a plain pipe.
+	#    This guards against qemu-user ENOTTY even when openpty is disabled.
+	GUARD_MARKER = '# [stage5-qemu-guard]'
+	if GUARD_MARKER not in txt:
+		# Find the function definition line and inject a try/except wrapper around
+		# the termios call inside it by replacing the whole function body with a
+		# safe version that catches termios.error.
+		old_fn = 'def _create_pty_or_pipe(copy_term_settings=None):'
+		new_wrapper = (
+			'def _create_pty_or_pipe(copy_term_settings=None):  ' + GUARD_MARKER + '\n'
+			'\timport os as _os\n'
+			'\ttry:\n'
+			'\t\treturn _create_pty_or_pipe_real(copy_term_settings=copy_term_settings)\n'
+			'\texcept Exception:\n'
+			'\t\tr, w = _os.pipe()\n'
+			'\t\treturn False, r, w\n'
+			'\n'
+			'def _create_pty_or_pipe_real(copy_term_settings=None):'
+		)
+		if old_fn in txt:
+			txt = txt.replace(old_fn, new_wrapper, 1)
+			changed = True
+			print(f'[stage5] Wrapped _create_pty_or_pipe with pipe fallback: {p}')
+		else:
+			print(f'[stage5] WARNING: could not find _create_pty_or_pipe to wrap in {p}')
+
+	if changed:
 		p.write_text(txt, encoding='utf-8')
-		print(f'[stage5] Injected Portage openpty disable: {p}')
 PY
 fi
 
