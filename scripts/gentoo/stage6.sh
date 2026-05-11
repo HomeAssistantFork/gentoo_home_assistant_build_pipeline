@@ -37,6 +37,11 @@ set -u
 export ARCH="${CHROOT_ARCH}"
 export CROSS_COMPILE="${CHROOT_CROSS}"
 
+mkdir -p /etc/portage/package.accept_keywords
+if ! grep -qxF 'sys-kernel/gentooha-kernel-config-alpha **' /etc/portage/package.accept_keywords/gentooha 2>/dev/null; then
+  echo 'sys-kernel/gentooha-kernel-config-alpha **' >> /etc/portage/package.accept_keywords/gentooha
+fi
+
 emerge --ask=n --noreplace sys-kernel/installkernel
 
 if find /usr/src -maxdepth 1 -type d -name 'linux-*' | grep -q .; then
@@ -218,10 +223,8 @@ if [[ "${BUILD_UML_KERNEL}" == "true" && "${ARCH}" == "x86_64" ]]; then
   echo "Building optional User-Mode Linux kernel track"
   make mrproper
   make ARCH=um defconfig
-  make ARCH=um olddefconfig
-  make -j\$(nproc) ARCH=um linux
-  cp linux /boot/linux-uml
-  cp .config /boot/config-uml
+  make ARCH=um -j\$(nproc) linux
+  install -Dm755 linux /boot/vmlinuz-uml
 fi
 EOF
 )"
