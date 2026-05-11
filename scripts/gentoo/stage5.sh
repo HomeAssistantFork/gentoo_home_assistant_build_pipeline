@@ -114,6 +114,21 @@ printf 'PORTAGE_BACKGROUND="1"\n' >> /etc/portage/make.conf
 printf 'NOCOLOR="true"\n' >> /etc/portage/make.conf
 printf 'FEATURES="-pty"\n' >> /etc/portage/make.conf
 
+mkdir -p /etc/portage/gnupg
+chown -R root:root /etc/portage/gnupg
+chmod 700 /etc/portage/gnupg
+if command -v getuto >/dev/null 2>&1; then
+	echo "[stage5] Initializing Gentoo binpkg trust"
+	getuto || true
+fi
+if id -u portage >/dev/null 2>&1; then
+	chown -R portage:portage /etc/portage/gnupg
+else
+	chown -R root:root /etc/portage/gnupg
+fi
+find /etc/portage/gnupg -type d -exec chmod 700 {} +
+find /etc/portage/gnupg -type f -exec chmod 600 {} +
+
 mkdir -p /etc/portage/package.accept_keywords
 cat >/etc/portage/package.accept_keywords/gentooha <<EOF
 app-containers/docker ~${PORTAGE_ARCH}
