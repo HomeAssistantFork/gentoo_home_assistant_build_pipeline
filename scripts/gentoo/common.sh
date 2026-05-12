@@ -116,6 +116,18 @@ mount_chroot_fs() {
   mountpoint -q "$TARGET_ROOT/run" || mount --bind /run "$TARGET_ROOT/run"
 }
 
+ensure_portage_cache_dirs() {
+  run_in_chroot '
+set -euo pipefail
+
+if id -u portage >/dev/null 2>&1 && getent group portage >/dev/null 2>&1; then
+  install -d -m 2775 -o root -g portage /var/cache/distfiles /var/cache/distfiles/git3-src /var/tmp/portage
+else
+  install -d -m 0755 /var/cache/distfiles /var/cache/distfiles/git3-src /var/tmp/portage
+fi
+'
+}
+
 run_in_chroot() {
   local script="$1"
   case "${ARCH:-}" in

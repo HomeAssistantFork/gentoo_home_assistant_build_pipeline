@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage4
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 case "${ARCH:-amd64}" in
 	x86_64|amd64) PORTAGE_ARCH="amd64" ;;

@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage9
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 log "Installing AppArmor userspace tools and openssh (if not already present via meta-package)"
 chroot_script="$(cat <<'EOF'
@@ -260,8 +261,6 @@ echo "OS hardening and boot fixes complete"
 EOF
 )"
 
-# Pass FLAVOR into the chroot environment
-export FLAVOR="${FLAVOR:-live}"
 run_in_chroot "$hardening_script"
 
 stage_end stage9

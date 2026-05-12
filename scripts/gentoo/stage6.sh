@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage6
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 KERNEL_COMPAT_LABEL="${KERNEL_COMPAT_LABEL:-compat}"
 KERNEL_MODERN_LABEL="${KERNEL_MODERN_LABEL:-modern}"
@@ -223,8 +224,10 @@ if [[ "${BUILD_UML_KERNEL}" == "true" && "${ARCH}" == "x86_64" ]]; then
   echo "Building optional User-Mode Linux kernel track"
   make mrproper
   make ARCH=um defconfig
-  make ARCH=um -j\$(nproc) linux
-  install -Dm755 linux /boot/vmlinuz-uml
+  make ARCH=um olddefconfig
+  make -j\$(nproc) ARCH=um linux
+  cp linux /boot/linux-uml
+  cp .config /boot/config-uml
 fi
 EOF
 )"

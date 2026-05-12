@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage8
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 # Machine type for hassio.json — arch-specific, filled in here at build time.
 MACHINE="${MACHINE:-generic-x86-64}"

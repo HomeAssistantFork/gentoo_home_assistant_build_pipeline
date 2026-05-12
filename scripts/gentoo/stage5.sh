@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 stage_start stage5
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 log "Refreshing local gentooha overlay in chroot"
 rm -rf "$TARGET_ROOT/var/db/repos/gentooha"
