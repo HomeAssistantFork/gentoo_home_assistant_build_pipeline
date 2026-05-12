@@ -9,8 +9,7 @@ IUSE=""
 
 inherit git-r3 go-module systemd
 
-EGIT_CHECKOUT_DIR="os-agent"
-S="${WORKDIR}/${EGIT_CHECKOUT_DIR}"
+S="${WORKDIR}/${P}"
 
 # Try the GentooHA fork org first; fall back to upstream home-assistant.
 EGIT_REPO_URI="
@@ -28,6 +27,11 @@ DEPEND="${RDEPEND}"
 
 PROPERTIES="live"
 RESTRICT="mirror"
+
+src_unpack() {
+	git-r3_src_unpack
+	go-module_live_vendor
+}
 
 src_compile() {
 	# os-agent is a Go project; build the binary in the repo root.
