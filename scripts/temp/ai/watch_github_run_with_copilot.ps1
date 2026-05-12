@@ -12,7 +12,7 @@ param(
 
     [string]$Flavor = 'debug',
 
-    [Nullable[int]]$RunId,
+    [Nullable[long]]$RunId,
 
     [int]$PollMinutes = 5,
 
@@ -79,7 +79,7 @@ function Get-WorkflowId {
         throw "Workflow not found: $WorkflowName"
     }
 
-    return [int]$workflow.id
+    return [long]$workflow.id
 }
 
 function Get-LatestRun {
@@ -92,12 +92,12 @@ function Get-LatestRun {
 }
 
 function Get-Run {
-    param([Parameter(Mandatory = $true)][int]$Id)
+    param([Parameter(Mandatory = $true)][long]$Id)
     return Invoke-GitHubApi -Arguments @("repos/$Owner/$Repo/actions/runs/$Id")
 }
 
 function Get-RunJobs {
-    param([Parameter(Mandatory = $true)][int]$Id)
+    param([Parameter(Mandatory = $true)][long]$Id)
     $jobsResponse = Invoke-GitHubApi -Arguments @("repos/$Owner/$Repo/actions/runs/$Id/jobs?per_page=100")
     return @($jobsResponse.jobs)
 }
@@ -161,8 +161,8 @@ function Save-RunSnapshot {
 
 function Export-FailedJobLog {
     param(
-        [Parameter(Mandatory = $true)][int]$WorkflowRunId,
-        [Parameter(Mandatory = $true)][int]$JobId,
+        [Parameter(Mandatory = $true)][long]$WorkflowRunId,
+        [Parameter(Mandatory = $true)][long]$JobId,
         [Parameter(Mandatory = $true)][string]$OutputPath
     )
 
@@ -176,7 +176,7 @@ function Export-FailedJobLog {
 
 function Start-CopilotInvestigation {
     param(
-        [Parameter(Mandatory = $true)][int]$WorkflowRunId,
+        [Parameter(Mandatory = $true)][long]$WorkflowRunId,
         [Parameter(Mandatory = $true)][string]$FailureReason,
         [Parameter(Mandatory = $true)][string]$LogDirectory,
         [string]$AttachmentPath
@@ -289,7 +289,7 @@ if (-not $RunId) {
         throw "No workflow runs found for $WorkflowName on branch $Branch"
     }
 
-    $RunId = [int]$latestRun.id
+    $RunId = [long]$latestRun.id
 }
 
 Write-Host "Watching run $RunId"
@@ -338,7 +338,7 @@ while ($true) {
                 }
                 $attachmentPath = Join-Path $watchDirectory "$safeJobName.failed.log"
                 try {
-                    Export-FailedJobLog -WorkflowRunId $RunId -JobId ([int]$failedJob.id) -OutputPath $attachmentPath
+                    Export-FailedJobLog -WorkflowRunId $RunId -JobId ([long]$failedJob.id) -OutputPath $attachmentPath
                 }
                 catch {
                     $attachmentPath = $null
