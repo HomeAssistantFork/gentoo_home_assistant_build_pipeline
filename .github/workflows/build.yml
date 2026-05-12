@@ -988,7 +988,7 @@ jobs:
       - name: Archive stage12 binpkgs
         if: ${{ steps.reuse_stage12.outputs.cache_hit != 'true' }}
         run: |
-          sudo bash -lc 'set -euo pipefail
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash -lc 'set -euo pipefail
           if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
             tar -C /mnt/gentoo/var/cache -czf /tmp/binpkgs-${PLATFORM}-${FLAVOR}.tar.gz binpkgs
           else
