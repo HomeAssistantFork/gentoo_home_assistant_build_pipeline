@@ -105,7 +105,11 @@ function Get-RunJobs {
 function Resolve-CopilotCommand {
     $command = Get-Command copilot -ErrorAction SilentlyContinue
     if ($command) {
-        return $command.Source
+        return [ordered]@{
+            FilePath     = $command.Source
+            PrefixArgs   = @()
+            IsPowerShell = $command.Source -match '\.ps1$'
+        }
     }
 
     if (Test-Command -Name npm) {
@@ -117,7 +121,11 @@ function Resolve-CopilotCommand {
             (Join-Path $npmPrefix 'node_modules\.bin\copilot')
         )) {
             if (Test-Path -LiteralPath $candidate) {
-                return $candidate
+                return [ordered]@{
+                    FilePath     = $candidate
+                    PrefixArgs   = @()
+                    IsPowerShell = $candidate -match '\.ps1$'
+                }
             }
         }
     }
@@ -230,7 +238,14 @@ Requirements:
         $arguments += $AttachmentPath
     }
 
-    $process = Start-Process -FilePath $copilotCommand -ArgumentList $arguments -WorkingDirectory $RepoRoot -RedirectStandardOutput $copilotStdout -RedirectStandardError $copilotStderr -PassThru
+    $launcherFilePath = $copilotCommand.FilePath
+    $launcherArgs = @()
+    if ($copilotCommand.IsPowerShell) {
+        $launcherFilePath = 'pwsh'
+        $launcherArgs = @('-NoProfile', '-File', $copilotCommand.FilePath)
+    }
+
+    $process = Start-Process -FilePath $launcherFilePath -ArgumentList @($launcherArgs + $arguments) -WorkingDirectory $RepoRoot -RedirectStandardOutput $copilotStdout -RedirectStandardError $copilotStderr -PassThru
 
     [ordered]@{
         started_at = (Get-Date).ToString('o')

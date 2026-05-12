@@ -3,11 +3,17 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 stage_start stage8
 require_root
 mount_chroot_fs
 ensure_portage_cache_dirs
+
+log "Refreshing local gentooha overlay in chroot"
+rm -rf "$TARGET_ROOT/var/db/repos/gentooha"
+mkdir -p "$TARGET_ROOT/var/db/repos/gentooha"
+cp -a "$REPO_ROOT/overlay/." "$TARGET_ROOT/var/db/repos/gentooha/"
 
 # Machine type for hassio.json — arch-specific, filled in here at build time.
 MACHINE="${MACHINE:-generic-x86-64}"
@@ -30,6 +36,23 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
+
+# Ensure the current overlay checkout is configured and manifested inside the chroot.
+mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /etc/portage/repos.conf
+cat >/etc/portage/repos.conf/gentooha.conf <<'EOF'
+[gentooha]
+location = /var/db/repos/gentooha
+masters = gentoo
+auto-sync = no
+EOF
+
+if command -v ebuild >/dev/null 2>&1 && [[ ! -f /var/db/repos/gentooha/sys-apps/gentooha-os-agent/Manifest ]]; then
+  find /var/db/repos/gentooha -mindepth 3 -maxdepth 3 -name '*.ebuild' -print0 | while IFS= read -r -d '' ebuild_file; do
+    pkg_dir="$(dirname "$ebuild_file")"
+    echo "[stage8] Generating manifest for overlay package: $pkg_dir"
+    (cd "$pkg_dir" && ebuild "$(basename "$ebuild_file")" manifest)
+  done
+fi
 
 # Accept live ebuilds for supervisor and os-agent if not already accepted.
 mkdir -p /etc/portage/package.accept_keywords
