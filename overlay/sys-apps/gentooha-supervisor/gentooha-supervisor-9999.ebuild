@@ -29,12 +29,17 @@ PROPERTIES="live"
 RESTRICT="mirror"
 
 src_install() {
-	# supervised-installer stores its rootfs files under rootfs/
+	# supervised-installer has used both rootfs/ and homeassistant-supervised/
+	# as its payload root across revisions. Accept either layout.
 	local rootfs="${S}/rootfs"
 	if [[ ! -d "${rootfs}" ]]; then
-		eerror "Expected rootfs/ directory not found in supervised-installer checkout."
+		rootfs="${S}/homeassistant-supervised"
+	fi
+	if [[ ! -d "${rootfs}" ]]; then
+		eerror "Expected payload directory not found in supervised-installer checkout."
+		eerror "Checked: ${S}/rootfs and ${S}/homeassistant-supervised"
 		eerror "Repo structure may have changed. Check ${S}."
-		die "rootfs/ not found"
+		die "supervised-installer payload dir not found"
 	fi
 
 	# ── Supervisor launch script ───────────────────────────────────────────────
@@ -92,7 +97,7 @@ src_install() {
 				break
 			fi
 		done
-	done
+		done
 
 	# ── hassio.json template ──────────────────────────────────────────────────
 	# Machine type is arch-specific; stage8 fills in %%MACHINE%% at build time.
