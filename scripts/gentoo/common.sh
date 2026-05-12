@@ -120,6 +120,10 @@ ensure_portage_cache_dirs() {
   run_in_chroot '
 set -euo pipefail
 
+# Restored rootfs artifacts exclude volatile temp trees, but Portage sandbox
+# and ebuild helpers still expect them to exist.
+install -d -m 1777 /tmp /var/tmp
+
 if id -u portage >/dev/null 2>&1 && getent group portage >/dev/null 2>&1; then
   install -d -m 2775 -o root -g portage /var/cache/distfiles /var/cache/distfiles/git3-src /var/tmp/portage
 else
