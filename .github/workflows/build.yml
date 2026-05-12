@@ -105,7 +105,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage1
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage1
           path: /tmp
@@ -156,7 +156,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage2
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage2
           path: /tmp
@@ -207,7 +207,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage3
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage3
           path: /tmp
@@ -258,7 +258,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage4
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage4
           path: /tmp
@@ -311,7 +311,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage5
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage5
           path: /tmp
@@ -362,7 +362,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage6
           path: /tmp
@@ -413,7 +413,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage7
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage7
           path: /tmp
@@ -464,7 +464,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage8
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage8
           path: /tmp
@@ -515,7 +515,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage9
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage9
           path: /tmp
@@ -568,7 +568,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage10
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage10
           path: /tmp
@@ -619,7 +619,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage11
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage11
           path: /tmp
@@ -689,7 +689,7 @@ jobs:
           SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
 
       - name: Download rootfs from stage12
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage12
           path: /tmp
