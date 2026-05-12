@@ -31,7 +31,7 @@ esac
 HASSIO_DOCKER="ghcr.io/home-assistant/${HA_ARCH}-hassio-supervisor"
 
 log "Installing Supervisor and os-agent packages (HomeAssistantFork → upstream fallback)"
-run_in_chroot "
+run_in_chroot "$(cat <<'CHROOT_STAGE8'
 set -euo pipefail
 set +u
 source /etc/profile
@@ -65,7 +65,8 @@ emerge --ask=n --noreplace sys-apps/gentooha-supervisor sys-apps/gentooha-os-age
 
 # Enable Supervisor and os-agent services.
 systemctl enable hassio-apparmor.service hassio-supervisor.service os-agent.service
-"
+CHROOT_STAGE8
+)"
 
 # Fill in machine-specific values in hassio.json template (%%MACHINE%% placeholder
 # is left by the gentooha-supervisor ebuild so the stage can substitute per-platform).

@@ -103,12 +103,39 @@ function Get-RunJobs {
 }
 
 function Resolve-CopilotCommand {
+    $winGetPackageRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    if (Test-Path -LiteralPath $winGetPackageRoot) {
+        $realExe = Get-ChildItem -LiteralPath $winGetPackageRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like 'GitHub.Copilot_*' } |
+            Select-Object -First 1 |
+            ForEach-Object {
+                Get-ChildItem -LiteralPath $_.FullName -Recurse -Filter 'copilot.exe' -File -ErrorAction SilentlyContinue |
+                    Select-Object -First 1 -ExpandProperty FullName
+            }
+
+        if ($realExe -and (Test-Path -LiteralPath $realExe)) {
+            return [ordered]@{
+                FilePath = $realExe
+            }
+        }
+    }
+
     $command = Get-Command copilot -ErrorAction SilentlyContinue
     if ($command) {
-        return [ordered]@{
-            FilePath     = $command.Source
-            PrefixArgs   = @()
-            IsPowerShell = $command.Source -match '\.ps1$'
+        foreach ($propertyName in 'Path', 'Source', 'Definition') {
+            $property = $command.PSObject.Properties[$propertyName]
+            if ($property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                $candidate = [string]$property.Value
+                if ($candidate -match '\.ps1$') {
+                    continue
+                }
+
+                if (Test-Path -LiteralPath $candidate) {
+                    return [ordered]@{
+                        FilePath = $candidate
+                    }
+                }
+            }
         }
     }
 
@@ -122,9 +149,7 @@ function Resolve-CopilotCommand {
         )) {
             if (Test-Path -LiteralPath $candidate) {
                 return [ordered]@{
-                    FilePath     = $candidate
-                    PrefixArgs   = @()
-                    IsPowerShell = $candidate -match '\.ps1$'
+                    FilePath = $candidate
                 }
             }
         }
@@ -238,14 +263,7 @@ Requirements:
         $arguments += $AttachmentPath
     }
 
-    $launcherFilePath = $copilotCommand.FilePath
-    $launcherArgs = @()
-    if ($copilotCommand.IsPowerShell) {
-        $launcherFilePath = 'pwsh'
-        $launcherArgs = @('-NoProfile', '-File', $copilotCommand.FilePath)
-    }
-
-    $process = Start-Process -FilePath $launcherFilePath -ArgumentList @($launcherArgs + $arguments) -WorkingDirectory $RepoRoot -RedirectStandardOutput $copilotStdout -RedirectStandardError $copilotStderr -PassThru
+    $process = Start-Process -FilePath $copilotCommand.FilePath -ArgumentList $arguments -WorkingDirectory $RepoRoot -RedirectStandardOutput $copilotStdout -RedirectStandardError $copilotStderr -PassThru
 
     [ordered]@{
         started_at = (Get-Date).ToString('o')
