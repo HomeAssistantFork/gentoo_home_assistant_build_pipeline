@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Sync GentooHA compatibility os-release to the runtime path expected by Supervisor
+set -euo pipefail
+install -Dm0644 /etc/ha-compat/os-release /run/os-release

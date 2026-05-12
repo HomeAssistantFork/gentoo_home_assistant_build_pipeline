@@ -1,0 +1,12 @@
+[Unit]
+Description=Sync Home Assistant compatibility os-release to runtime path
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/ha-os-release-sync
+
+[Install]
+WantedBy=multi-user.target

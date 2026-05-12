@@ -116,7 +116,41 @@ mount_chroot_fs() {
   mountpoint -q "$TARGET_ROOT/run" || mount --bind /run "$TARGET_ROOT/run"
 }
 
+ensure_portage_cache_dirs() {
+  run_in_chroot '
+set -euo pipefail
+
+if id -u portage >/dev/null 2>&1 && getent group portage >/dev/null 2>&1; then
+  install -d -m 2775 -o root -g portage /var/cache/distfiles /var/cache/distfiles/git3-src /var/tmp/portage
+else
+  install -d -m 0755 /var/cache/distfiles /var/cache/distfiles/git3-src /var/tmp/portage
+fi
+'
+}
+
 run_in_chroot() {
   local script="$1"
-  chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+  case "${ARCH:-}" in
+    arm|armv7|armv7a)
+      # Prefer binfmt-managed execution when available; fall back to explicit qemu.
+      if chroot "$TARGET_ROOT" /bin/true >/dev/null 2>&1; then
+        chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+      else
+        [[ -x "$TARGET_ROOT/usr/bin/qemu-arm-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-arm-static for ARM chroot execution"
+        chroot "$TARGET_ROOT" /usr/bin/qemu-arm-static /bin/bash -lc "$script"
+      fi
+      ;;
+    arm64|aarch64)
+      # Prefer binfmt-managed execution when available; fall back to explicit qemu.
+      if chroot "$TARGET_ROOT" /bin/true >/dev/null 2>&1; then
+        chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+      else
+        [[ -x "$TARGET_ROOT/usr/bin/qemu-aarch64-static" ]] || die "Missing $TARGET_ROOT/usr/bin/qemu-aarch64-static for ARM64 chroot execution"
+        chroot "$TARGET_ROOT" /usr/bin/qemu-aarch64-static /bin/bash -lc "$script"
+      fi
+      ;;
+    *)
+      chroot "$TARGET_ROOT" /bin/bash -lc "$script"
+      ;;
+  esac
 }

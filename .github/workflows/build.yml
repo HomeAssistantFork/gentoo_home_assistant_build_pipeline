@@ -86,7 +86,7 @@ jobs:
     name: stage2 - base system config
     runs-on: ubuntu-latest
     needs: stage1
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -597,7 +597,7 @@ jobs:
           overwrite: true
 
   stage12:
-    name: stage12 - manifest + publish artifacts
+    name: stage12 - generate binary package cache
     runs-on: ubuntu-latest
     needs: stage11
     timeout-minutes: 60
@@ -632,6 +632,76 @@ jobs:
         run: |
           sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=12 END_STAGE=12 CLEAN_STATE=false bash build.sh --non-interactive
 
+      - name: Pack rootfs after stage12
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage12.tar.zst
+
+      - name: Archive stage12 binpkgs
+        run: |
+          sudo bash -lc 'set -euo pipefail
+          if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
+            tar -C /mnt/gentoo/var/cache -czf /tmp/binpkgs-${PLATFORM}-${FLAVOR}.tar.gz binpkgs
+          else
+            echo "No /mnt/gentoo/var/cache/binpkgs directory found; skipping binpkg archive"
+          fi'
+
+      - name: Upload rootfs stage12 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage12
+          path: |
+            /tmp/rootfs-stage12.tar.zst
+            /tmp/rootfs_meta.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+      - name: Upload binpkg cache bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: gentooha-binpkgs-${{ inputs.platform }}-${{ inputs.flavor }}
+          path: |
+            /tmp/binpkgs-${{ inputs.platform }}-${{ inputs.flavor }}.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true
+
+  stage13:
+    name: stage13 - manifest + publish artifacts
+    runs-on: ubuntu-latest
+    needs: stage12
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install runner dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git rsync zstd qemu-utils
+
+      - name: Clone HA org repos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHALLOW=true RESUME=true INCLUDE_ARCHIVED=false bash scripts/repos/clone_home_assistant_org.sh
+
+      - name: Download rootfs from stage12
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage12
+          path: /tmp
+
+      - name: Restore rootfs from stage12
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_unpack.sh /tmp/rootfs-stage12.tar.zst
+
+      - name: Run stage13 only
+        run: |
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=13 END_STAGE=13 CLEAN_STATE=false bash build.sh --non-interactive
+
       - name: Upload final build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -642,10 +712,10 @@ jobs:
           retention-days: 14
           overwrite: true
 
-      - name: Upload stage12 manifest bundle
+      - name: Upload stage13 manifest bundle
         uses: actions/upload-artifact@v4
         with:
-          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage12
+          name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage13
           path: |
             /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.manifest.txt
           if-no-files-found: warn

@@ -7,18 +7,20 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage9
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
-log "Installing and enabling AppArmor userspace tools inside chroot"
+log "Installing AppArmor userspace tools and openssh (if not already present via meta-package)"
 chroot_script="$(cat <<'EOF'
 set -euo pipefail
 set +u
 source /etc/profile
 set -u
 
-# Install AppArmor userspace and SSH server for VM diagnostics/access
-emerge --ask=n sys-apps/apparmor net-misc/openssh
+# sys-apps/apparmor and net-misc/openssh are deps of gentooha-alpha (stage4).
+# Use --noreplace so this is a no-op on a full build; installs them on partial runs.
+emerge --ask=n --noreplace sys-apps/apparmor net-misc/openssh
 
-# Ensure Docker CLI exists for hassio-supervisor service/scripts.
+# Ensure Docker CLI is present.
 if ! command -v docker &>/dev/null; then
     emerge --ask=n --noreplace app-containers/docker-cli \
         || emerge --ask=n --noreplace app-containers/moby-cli \
@@ -33,22 +35,13 @@ if ! command -v docker &>/dev/null; then
     fi
 fi
 
-if ! command -v docker &>/dev/null; then
-    echo 'WARNING: docker CLI still missing after stage9 install attempts' >&2
-fi
-
-# Enable the AppArmor systemd service so profiles load on boot
+# Enable the AppArmor systemd service so profiles load on boot.
 if command -v systemctl &>/dev/null; then
     systemctl enable apparmor.service
-    echo "AppArmor service enabled via systemctl"
-elif command -v rc-update &>/dev/null; then
-    rc-update add apparmor boot
-    echo "AppArmor service added to OpenRC boot runlevel"
-else
-    echo "WARNING: Neither systemctl nor rc-update found; enable apparmor service manually" >&2
+    echo "AppArmor service enabled"
 fi
 
-# Verify apparmor_parser is available
+# Verify apparmor_parser is available.
 if command -v apparmor_parser &>/dev/null; then
     echo "apparmor_parser: $(apparmor_parser --version 2>&1 | head -1)"
 else
@@ -56,7 +49,7 @@ else
     exit 1
 fi
 
-echo "AppArmor userspace setup complete"
+echo "AppArmor and openssh setup complete"
 EOF
 )"
 
@@ -268,8 +261,6 @@ echo "OS hardening and boot fixes complete"
 EOF
 )"
 
-# Pass FLAVOR into the chroot environment
-export FLAVOR="${FLAVOR:-live}"
 run_in_chroot "$hardening_script"
 
 stage_end stage9
