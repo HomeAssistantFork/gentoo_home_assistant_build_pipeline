@@ -935,7 +935,7 @@ jobs:
     name: stage12 - generate binary package cache
     runs-on: ubuntu-latest
     needs: stage11
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
