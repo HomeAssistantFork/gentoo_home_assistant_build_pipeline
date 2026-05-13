@@ -7,22 +7,11 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage6
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 KERNEL_COMPAT_LABEL="${KERNEL_COMPAT_LABEL:-compat}"
 KERNEL_MODERN_LABEL="${KERNEL_MODERN_LABEL:-modern}"
 BUILD_UML_KERNEL="${BUILD_UML_KERNEL:-false}"
-
-# Install cross-compile toolchain on build host if targeting ARM
-if [[ -n "${CROSS_COMPILE:-}" ]] && command -v apt-get >/dev/null 2>&1; then
-  log "Installing ARM cross-compile toolchain for ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}"
-  apt-get update -y -q
-  if [[ "$ARCH" == "arm64" ]]; then
-    apt-get install -y -q gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-  else
-    apt-get install -y -q gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
-  fi
-  apt-get install -y -q qemu-user-static binfmt-support || true
-fi
 
 # Platform-specific kernel defconfig
 case "${PLATFORM:-x64}" in
@@ -49,6 +38,11 @@ set -u
 export ARCH="${CHROOT_ARCH}"
 export CROSS_COMPILE="${CHROOT_CROSS}"
 
+mkdir -p /etc/portage/package.accept_keywords
+if ! grep -qxF 'sys-kernel/gentooha-kernel-config-alpha **' /etc/portage/package.accept_keywords/gentooha 2>/dev/null; then
+  echo 'sys-kernel/gentooha-kernel-config-alpha **' >> /etc/portage/package.accept_keywords/gentooha
+fi
+
 emerge --ask=n --noreplace sys-kernel/installkernel
 
 if find /usr/src -maxdepth 1 -type d -name 'linux-*' | grep -q .; then
@@ -58,6 +52,8 @@ else
   emerge --ask=n sys-kernel/gentoo-sources
 fi
 
+emerge --ask=n --noreplace sys-kernel/gentooha-kernel-config-alpha
+
 kernel_src_dir="\$(find /usr/src -maxdepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
 [[ -n "\$kernel_src_dir" ]] || { echo 'No installed kernel sources found' >&2; exit 1; }
 ln -sfn "\$kernel_src_dir" /usr/src/linux
@@ -65,6 +61,17 @@ cd /usr/src/linux
 
 # Shared helper: apply all Docker/Supervisor required kernel options.
 apply_ha_kernel_options() {
+  local flag_file="/usr/share/gentooha-kernel-config-alpha/required-flags.conf"
+  if [[ -f "\$flag_file" ]]; then
+    while IFS= read -r config_line; do
+      config_line="\${config_line#\${config_line%%[![:space:]]*}}"
+      [[ -z "\$config_line" || "\${config_line:0:1}" == "#" ]] && continue
+      # shellcheck disable=SC2086
+      ./scripts/config \$config_line
+    done < <(tr -d '\r' < "\$flag_file")
+    return
+  fi
+
   # Overlay filesystem (containers, add-on layers) — built-in
   ./scripts/config --enable CONFIG_OVERLAY_FS
   # Dummy and MACVLAN/IPVLAN (Supervisor network isolation)

@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 stage_start stage11
 require_root
 mount_chroot_fs
+ensure_portage_cache_dirs
 
 ARTIFACT_DIR="${ARTIFACT_DIR:-/var/lib/ha-gentoo-hybrid/artifacts}"
 WORK_DIR="${WORK_DIR:-/var/lib/ha-gentoo-hybrid/work/stage11-$$}"
