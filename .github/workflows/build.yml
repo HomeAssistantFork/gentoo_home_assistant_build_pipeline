@@ -1057,7 +1057,7 @@ jobs:
         with:
           name: gentooha-${{ inputs.platform }}-${{ inputs.flavor }}
           path: |
-            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
+            artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.*
           if-no-files-found: error
           retention-days: 14
           overwrite: true
@@ -1067,7 +1067,7 @@ jobs:
         with:
           name: rootfs-${{ inputs.platform }}-${{ inputs.flavor }}-stage13
           path: |
-            /var/lib/ha-gentoo-hybrid/artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.manifest.txt
+            artifacts/gentooha-${{ inputs.platform }}-${{ inputs.flavor }}.manifest.txt
           if-no-files-found: warn
           retention-days: 14
           overwrite: true
