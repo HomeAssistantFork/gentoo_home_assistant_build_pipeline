@@ -31,7 +31,7 @@ gentooha_platform() {
 gentooha_kernel_arch() {
 	if [[ -n "${GENTOOHA_KERNEL_ARCH:-}" ]]; then
 		case "${GENTOOHA_KERNEL_ARCH}" in
-			x86_64) echo "x86" ;;
+			amd64|x86_64) echo "x86" ;;
 			*) echo "${GENTOOHA_KERNEL_ARCH}" ;;
 		esac
 		return
@@ -210,7 +210,7 @@ stage_track() {
 	image_path="$(gentooha_kernel_image)"
 
 	einfo "Building ${label} kernel track for $(gentooha_platform)"
-	emake mrproper || die
+	emake ARCH="${kernel_arch}" CROSS_COMPILE="${cross_compile}" mrproper || die
 	if [[ -n "${seed_config}" ]]; then
 		cp "${seed_config}" .config || die
 	else
