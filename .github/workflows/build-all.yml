@@ -19,6 +19,11 @@ on:
         default: all
         type: choice
         options: [all, live, installer, debug]
+      x64_artifact_formats:
+        description: "X64 artifact formats to build (space/comma separated)"
+        required: false
+        default: "vdi iso img"
+        type: string
       publish_release:
         description: "Publish build artifacts to a GitHub Release"
         required: false
@@ -42,6 +47,7 @@ jobs:
       platform: ${{ matrix.platform }}
       flavor:   ${{ matrix.flavor }}
       start_stage: "1"
+      x64_artifact_formats: ${{ github.event_name == 'workflow_dispatch' && inputs.x64_artifact_formats || 'vdi iso img' }}
     secrets: inherit
 
   release:
@@ -78,3 +84,4 @@ jobs:
             /tmp/release-assets/gentooha-*.vhd
             /tmp/release-assets/gentooha-*.manifest.txt
             /tmp/release-assets/binpkgs-*.tar.gz
+            /tmp/release-assets/gentooha-binhost-*.tar.zst

@@ -270,7 +270,7 @@ The build pipeline consists of 13 stages, each with a specific role in construct
 - Bind-mount `/proc`, `/sys`, `/dev` into chroot
 - Sync Portage tree from Gentoo mirrors
 - Apply default/linux system profile
-- Copy and register local `gentooha` overlay (contains `sys-kernel/gentooha-kernel-config-alpha`)
+- Copy and register local `gentooha` overlay (contains `sys-kernel/gentooha-kernel-alpha` and `sys-kernel/gentooha-kernel-config-alpha`)
 - Install systemd-networkd, systemd-resolved as boot services
 - Update entire `@world` package set
 
@@ -297,17 +297,17 @@ The build pipeline consists of 13 stages, each with a specific role in construct
 **Inputs**: Base system from stage4  
 **Outputs**: Compatibility layer active and service-enabled
 
-### Stage 6: Kernel Build (Dual Track)
-**Purpose**: Build dual kernel tracks (compat and modern) with Home Assistant Supervisor prerequisites  
+### Stage 6: Kernel Package Build (Dual Track)
+**Purpose**: Build dual kernel tracks (compat and modern) as a Portage-installed kernel package  
 **Key Actions**:
-- Install `sys-kernel/gentooha-kernel-config-alpha` package from local overlay
-- Read and apply required kernel flags from package manifest (150+ flags for BPF, cgroups, netfilter, AppArmor, etc.)
+- Emerge `sys-kernel/gentooha-kernel-alpha` from the local overlay
+- Read and apply required kernel flags from `sys-kernel/gentooha-kernel-config-alpha`
 - Build `compat` kernel (conservative settings for compatibility)
 - Build `modern` kernel (latest Gentoo kernel with latest features)
-- Generate boot menu entries for both tracks
+- Install kernel images, modules, configs, and DTBs through Portage so stage12 can emit a standalone kernel binpkg
 
-**Inputs**: Base system from stage5; kernel sources; local overlay with alpha config package  
-**Outputs**: Two bootable kernels with Supervisor prerequisites (`CONFIG_BPF_SYSCALL`, `CONFIG_CGROUP_BPF`, etc.)
+**Inputs**: Base system from stage5; kernel sources; local overlay with kernel package and config package  
+**Outputs**: Two bootable kernels with Supervisor prerequisites and a Portage-managed kernel package install
 
 ### Stage 7: Services & Daemons
 **Purpose**: Install and configure system services  
@@ -355,7 +355,7 @@ The build pipeline consists of 13 stages, each with a specific role in construct
 **Purpose**: Create bootable VM/appliance images from the rootfs  
 **Key Actions**:
 - Package rootfs into VDI (VirtualBox) format for x64
-- Create alternative formats (ISO, IMG) if specified
+- Release workflows request x64 `vdi iso img` outputs by default
 - Configure boot parameters and kernel command-line options
 - Embed both kernel tracks (compat/modern) for boot selection
 - For debug flavor: disable modesetting, enable verbose logging
@@ -371,9 +371,14 @@ The build pipeline consists of 13 stages, each with a specific role in construct
 - Run `emerge --buildpkg=y @world` to precompile all packages as binary `.tbz2` archives
 - Exclude virtual and metadata-only packages
 - Store binaries in `/var/cache/binpkgs/` for reuse by `--getbinpkg` in future builds
+- Publish a release-friendly binhost archive as `gentooha-binhost-<platform>-<flavor>.tar.zst`
 
 **Inputs**: Completed system from stage11  
-**Outputs**: Binary package cache (`.tbz2` files) in `binpkgs/` directory
+**Outputs**: Binary package cache (`.tbz2` files) in `binpkgs/` directory plus a `gentooha-binhost-*.tar.zst` release asset
+
+Notes:
+- GitHub Actions artifacts are downloaded as `.zip` containers by GitHub even when the real payload inside is `.iso`, `.img`, or Portage binpkg content.
+- Stage 6 now installs `sys-kernel/gentooha-kernel-alpha` through Portage, so stage12 can emit the compiled kernel as a standalone binpkg alongside the rest of `@world`.
 
 ### Stage 13: Artifact Manifest & Finalization
 **Purpose**: Generate checksums and metadata for all artifacts  
