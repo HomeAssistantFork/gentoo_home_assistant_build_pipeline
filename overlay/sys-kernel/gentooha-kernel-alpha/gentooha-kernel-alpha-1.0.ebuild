@@ -283,6 +283,8 @@ pkg_postinst() {
 	local modern_label="${GENTOOHA_KERNEL_MODERN_LABEL:-modern}"
 	local source_dir=""
 	local kernel_config=""
+	local module_dir
+	local kernel_release
 
 	source_dir="$(find /usr/src -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
 	if [[ -n "${source_dir}" ]]; then
@@ -296,6 +298,14 @@ pkg_postinst() {
 			cp -f "${kernel_config}" "${source_dir}/.config" || die "Unable to refresh ${source_dir}/.config"
 		fi
 	fi
+
+	for module_dir in /lib/modules/*; do
+		[[ -d "${module_dir}" ]] || continue
+		kernel_release="${module_dir##*/}"
+		if [[ ! -f "${module_dir}/modules.dep" ]]; then
+			depmod -a "${kernel_release}" || die "Unable to generate module metadata for ${kernel_release}"
+		fi
+	done
 
 	elog "GentooHA kernel tracks installed."
 	elog "Compatibility config: /boot/config-${compat_label}"

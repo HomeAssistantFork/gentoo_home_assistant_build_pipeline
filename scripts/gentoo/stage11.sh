@@ -99,6 +99,25 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
+module_dir=''
+if [[ -d '/usr/lib/modules/${KERNEL_VERSION}' ]]; then
+  module_dir='/usr/lib/modules/${KERNEL_VERSION}'
+elif [[ -d '/lib/modules/${KERNEL_VERSION}' ]]; then
+  module_dir='/lib/modules/${KERNEL_VERSION}'
+else
+  echo 'Kernel modules directory not found for ${KERNEL_VERSION}' >&2
+  exit 1
+fi
+
+if [[ ! -f "\${module_dir}/modules.dep" ]]; then
+  depmod -a '${KERNEL_VERSION}'
+fi
+
+if [[ ! -f "\${module_dir}/modules.dep" ]]; then
+  echo 'modules.dep was not generated for ${KERNEL_VERSION}' >&2
+  exit 1
+fi
+
 dracut --force --kver '${KERNEL_VERSION}' '/boot/initramfs-${KERNEL_VERSION}.img'
 "
 fi
