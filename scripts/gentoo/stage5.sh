@@ -141,10 +141,30 @@ chmod 700 /etc/portage/gnupg
 if command -v getuto >/dev/null 2>&1; then
 	echo "[stage5] Initializing Gentoo binpkg trust"
 	getuto || true
+else
+	echo "[stage5] WARNING: getuto not available; falling back to manual key import if needed"
 fi
-chown -R root:root /etc/portage/gnupg
-find /etc/portage/gnupg -type d -exec chmod 700 {} +
-find /etc/portage/gnupg -type f -exec chmod 600 {} +
+
+if command -v gpg >/dev/null 2>&1; then
+	if ! gpg --homedir /etc/portage/gnupg --list-keys 534E4209AB49EEE1C19D96162C44695DB9F6043D >/dev/null 2>&1; then
+		echo "[stage5] Importing Gentoo binpkg signing key 2C44695DB9F6043D"
+		gpg --batch --homedir /etc/portage/gnupg --keyserver hkps://keys.openpgp.org --recv-keys 534E4209AB49EEE1C19D96162C44695DB9F6043D || true
+	fi
+fi
+
+if id -u portage >/dev/null 2>&1 && getent group portage >/dev/null 2>&1; then
+	chown -R portage:portage /etc/portage/gnupg
+	chmod 700 /etc/portage/gnupg
+	find /etc/portage/gnupg -type d -exec chmod 700 {} +
+	find /etc/portage/gnupg -type f -exec chmod 600 {} +
+	if command -v su >/dev/null 2>&1 && command -v gpg >/dev/null 2>&1; then
+		su -s /bin/sh -c 'gpg --homedir /etc/portage/gnupg --list-keys >/dev/null 2>&1 || true' portage
+	fi
+else
+	chown -R root:root /etc/portage/gnupg
+	find /etc/portage/gnupg -type d -exec chmod 700 {} +
+	find /etc/portage/gnupg -type f -exec chmod 600 {} +
+fi
 
 mkdir -p /etc/portage/package.accept_keywords
 cat >/etc/portage/package.accept_keywords/gentooha <<EOF
