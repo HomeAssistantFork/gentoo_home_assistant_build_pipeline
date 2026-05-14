@@ -281,8 +281,26 @@ src_install() {
 pkg_postinst() {
 	local compat_label="${GENTOOHA_KERNEL_COMPAT_LABEL:-compat}"
 	local modern_label="${GENTOOHA_KERNEL_MODERN_LABEL:-modern}"
+	local source_dir=""
+	local kernel_config=""
+
+	source_dir="$(find /usr/src -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
+	if [[ -n "${source_dir}" ]]; then
+		ln -sfn "${source_dir}" /usr/src/linux || die "Unable to refresh /usr/src/linux symlink"
+		if [[ -f "/boot/config-${modern_label}" ]]; then
+			kernel_config="/boot/config-${modern_label}"
+		elif [[ -f "/boot/config-${compat_label}" ]]; then
+			kernel_config="/boot/config-${compat_label}"
+		fi
+		if [[ -n "${kernel_config}" ]]; then
+			cp -f "${kernel_config}" "${source_dir}/.config" || die "Unable to refresh ${source_dir}/.config"
+		fi
+	fi
 
 	elog "GentooHA kernel tracks installed."
 	elog "Compatibility config: /boot/config-${compat_label}"
 	elog "Modern config: /boot/config-${modern_label}"
+	if [[ -n "${source_dir}" ]]; then
+		elog "Configured kernel sources: ${source_dir}"
+	fi
 }
