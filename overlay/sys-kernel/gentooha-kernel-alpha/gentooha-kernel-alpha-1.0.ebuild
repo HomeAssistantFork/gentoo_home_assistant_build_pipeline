@@ -30,12 +30,15 @@ gentooha_platform() {
 
 gentooha_kernel_arch() {
 	if [[ -n "${GENTOOHA_KERNEL_ARCH:-}" ]]; then
-		echo "${GENTOOHA_KERNEL_ARCH}"
+		case "${GENTOOHA_KERNEL_ARCH}" in
+			x86_64) echo "x86" ;;
+			*) echo "${GENTOOHA_KERNEL_ARCH}" ;;
+		esac
 		return
 	fi
 
 	case "$(gentooha_platform)" in
-		x64) echo "x86_64" ;;
+		x64) echo "x86" ;;
 		pi3|bbb) echo "arm" ;;
 		pi4|pizero2|pbv2) echo "arm64" ;;
 		*) die "Unsupported GENTOOHA_PLATFORM: $(gentooha_platform)" ;;
@@ -70,7 +73,7 @@ gentooha_defconfig() {
 
 gentooha_kernel_image() {
 	case "$(gentooha_kernel_arch)" in
-		x86_64) echo "arch/x86/boot/bzImage" ;;
+		x86) echo "arch/x86/boot/bzImage" ;;
 		arm) echo "arch/arm/boot/zImage" ;;
 		arm64) echo "arch/arm64/boot/Image" ;;
 		*) die "No kernel image path for arch $(gentooha_kernel_arch)" ;;
@@ -219,7 +222,7 @@ stage_track() {
 	apply_ha_kernel_options
 	emake ARCH="${kernel_arch}" CROSS_COMPILE="${cross_compile}" olddefconfig || die
 	emake ARCH="${kernel_arch}" CROSS_COMPILE="${cross_compile}" LOCALVERSION="-${label}" || die
-	if [[ "${kernel_arch}" != "x86_64" ]]; then
+	if [[ "${kernel_arch}" != "x86" ]]; then
 		emake ARCH="${kernel_arch}" CROSS_COMPILE="${cross_compile}" LOCALVERSION="-${label}" dtbs || die
 	fi
 
@@ -236,7 +239,7 @@ stage_track() {
 		install -Dm0644 System.map "${image_root}/boot/System.map-${kernel_release}" || die
 	fi
 
-	if [[ "${kernel_arch}" != "x86_64" && -d arch/${kernel_arch}/boot/dts ]]; then
+	if [[ "${kernel_arch}" != "x86" && -d arch/${kernel_arch}/boot/dts ]]; then
 		while IFS= read -r -d '' dtb; do
 			boot_name="${dtb##*/}"
 			install -Dm0644 "${dtb}" "${image_root}/boot/${boot_name}" || die
