@@ -18,11 +18,11 @@ on:
         required: false
         default: all
         type: choice
-        options: [all, live, installer, debug]
+        options: [all, live, debug, installer]
       x64_artifact_formats:
         description: "X64 artifact formats to build (space/comma separated)"
         required: false
-        default: "vdi iso img"
+        default: "iso img"
         type: string
       publish_release:
         description: "Publish build artifacts to a GitHub Release"
@@ -41,13 +41,13 @@ jobs:
       fail-fast: false
       matrix:
         platform: [x64, pi3, pi4, pizero2, bbb, pbv2]
-        flavor: ${{ fromJSON(inputs.flavor == 'live' && '["live"]' || inputs.flavor == 'installer' && '["installer"]' || inputs.flavor == 'debug' && '["debug"]' || '["live","installer","debug"]') }}
+        flavor: ${{ fromJSON(inputs.flavor == 'live' && '["live"]' || inputs.flavor == 'installer' && '["live"]' || inputs.flavor == 'debug' && '["debug"]' || '["live","debug"]') }}
     uses: ./.github/workflows/build.yml
     with:
       platform: ${{ matrix.platform }}
       flavor:   ${{ matrix.flavor }}
       start_stage: "1"
-      x64_artifact_formats: ${{ github.event_name == 'workflow_dispatch' && inputs.x64_artifact_formats || 'vdi iso img' }}
+      x64_artifact_formats: ${{ matrix.platform != 'x64' && 'img' || (matrix.flavor == 'debug' && 'vdi img' || (github.event_name == 'workflow_dispatch' && inputs.x64_artifact_formats || 'iso img')) }}
     secrets: inherit
 
   release:

@@ -12,9 +12,9 @@ on:
       flavor:
         description: Build flavor
         required: true
-        default: debug
+        default: live
         type: choice
-        options: [live, installer, debug]
+        options: [live, debug, installer]
       reuse_previous_artifacts:
         description: Reuse matching stage artifacts from prior completed runs when available
         required: false
@@ -33,7 +33,7 @@ on:
       x64_artifact_formats:
         description: X64 artifact formats to build (space/comma separated)
         required: false
-        default: "vdi iso img"
+        default: "iso img"
         type: string
 
   workflow_call:
@@ -67,7 +67,7 @@ on:
       x64_artifact_formats:
         required: false
         type: string
-        default: "vdi iso img"
+        default: "iso img"
 
 permissions:
   contents: read
