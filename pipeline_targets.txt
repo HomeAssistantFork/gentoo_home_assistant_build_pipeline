@@ -1,0 +1,5 @@
+# Comma-delimited build targets for .github/workflows/build-all.yml.
+# Leave this file empty to build the full default matrix.
+# Each token may be either a platform (for all default flavors) or
+# a specific platform-flavor pair, for example: pi3-live,pbv2-debug
+pi3-live
