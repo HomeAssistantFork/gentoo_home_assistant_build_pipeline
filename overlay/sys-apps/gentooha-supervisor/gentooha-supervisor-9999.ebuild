@@ -10,12 +10,9 @@ IUSE=""
 
 inherit git-r3 systemd
 
-# Try the GentooHA fork org first; fall back to upstream home-assistant.
-# git-r3 will attempt each URI in order and use the first that works.
-EGIT_REPO_URI="
-	https://github.com/HomeAssistantFork/supervised-installer
-	https://github.com/home-assistant/supervised-installer
-"
+# The HomeAssistantFork mirror no longer exists; use upstream directly so
+# git-r3 does not fail in unpack before stage8 can install the package.
+EGIT_REPO_URI="https://github.com/home-assistant/supervised-installer"
 
 RDEPEND="
 	app-containers/docker

@@ -11,11 +11,9 @@ inherit git-r3 go-module systemd
 
 S="${WORKDIR}/${P}"
 
-# Try the GentooHA fork org first; fall back to upstream home-assistant.
-EGIT_REPO_URI="
-	https://github.com/HomeAssistantFork/os-agent
-	https://github.com/home-assistant/os-agent
-"
+# The HomeAssistantFork mirror no longer exists; use upstream directly so the
+# live ebuild can unpack reliably in stage8.
+EGIT_REPO_URI="https://github.com/home-assistant/os-agent"
 
 BDEPEND="
 	dev-lang/go
