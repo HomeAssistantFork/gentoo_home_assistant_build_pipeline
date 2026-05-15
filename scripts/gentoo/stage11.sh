@@ -89,7 +89,9 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
-emerge --ask=n --noreplace sys-kernel/dracut
+# dracut's dmsquash-live module requires the device-mapper userspace tools
+# shipped by lvm2 in order to enable its dependent dm module.
+emerge --ask=n --noreplace sys-kernel/dracut sys-fs/lvm2
 "
 
 if [[ ! -f "$INITRAMFS_IMAGE" ]]; then

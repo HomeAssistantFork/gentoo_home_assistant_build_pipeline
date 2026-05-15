@@ -164,7 +164,18 @@ emerge_args=(--ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace)
 if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
 	export MAKEOPTS="-j1"
 	export GOMAXPROCS=1
-	emerge_args=(--ask=n --getbinpkg --usepkgonly --binpkg-respect-use=y --noreplace --jobs=1 --load-average=1)
+	# ARM stage5 still needs the local overlay package built from source, but its
+	# heavy dependencies should stay on the binpkg path to avoid qemu-user thread
+	# explosions.
+	EMERGE_DEFAULT_OPTS="" emerge \
+		--ask=n --getbinpkg --usepkgonly --binpkg-respect-use=y \
+		--onlydeps --noreplace --jobs=1 --load-average=1 \
+		sys-apps/gentooha-compat
+	EMERGE_DEFAULT_OPTS="" emerge \
+		--ask=n --noreplace --oneshot --nodeps --jobs=1 --load-average=1 \
+		sys-apps/gentooha-compat
+	systemctl enable ha-os-release-sync.service
+	exit 0
 fi
 EMERGE_DEFAULT_OPTS="" emerge "${emerge_args[@]}" sys-apps/gentooha-compat
 
