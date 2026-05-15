@@ -179,7 +179,13 @@ EOF
 # gentooha-compat is pulled as a dep of gentooha-alpha in stage4, but emerge
 # --noreplace makes this a no-op if already installed so the stage is safe to
 # run standalone when skipping stage4.
-EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace sys-apps/gentooha-compat
+emerge_args=(--ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace)
+if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
+	export MAKEOPTS="-j1"
+	export GOMAXPROCS=1
+	emerge_args+=(--jobs=1 --load-average=1)
+fi
+EMERGE_DEFAULT_OPTS="" emerge "${emerge_args[@]}" sys-apps/gentooha-compat
 
 systemctl enable ha-os-release-sync.service
 CHROOT_STAGE5

@@ -61,7 +61,13 @@ grep -qxF 'sys-apps/gentooha-supervisor **' /etc/portage/package.accept_keywords
 grep -qxF 'sys-apps/gentooha-os-agent **' /etc/portage/package.accept_keywords/gentooha 2>/dev/null \
   || echo 'sys-apps/gentooha-os-agent **' >> /etc/portage/package.accept_keywords/gentooha
 
-emerge --ask=n --noreplace sys-apps/gentooha-supervisor sys-apps/gentooha-os-agent
+emerge_args=(--ask=n --noreplace)
+if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
+  export MAKEOPTS="-j1"
+  export GOMAXPROCS=1
+  emerge_args+=(--jobs=1 --load-average=1)
+fi
+emerge "${emerge_args[@]}" sys-apps/gentooha-supervisor sys-apps/gentooha-os-agent
 
 # Enable Supervisor and os-agent services.
 systemctl enable hassio-apparmor.service hassio-supervisor.service os-agent.service

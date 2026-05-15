@@ -60,7 +60,15 @@ EOF
 # must be built from source.  --usepkg allows binary packages where available
 # and falls back to source for overlay ebuilds (which are mostly file installs
 # with no compilation except gentooha-os-agent which uses Go).
-EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y gentooha/gentooha-alpha
+emerge_args=(--ask=n --getbinpkg --usepkg --binpkg-respect-use=y)
+if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
+	# qemu-user on GitHub runners is unstable when Portage or Go fan out worker
+	# threads during source-capable overlay installs.
+	export MAKEOPTS="-j1"
+	export GOMAXPROCS=1
+	emerge_args+=(--jobs=1 --load-average=1)
+fi
+EMERGE_DEFAULT_OPTS="" emerge "${emerge_args[@]}" gentooha/gentooha-alpha
 
 # Ensure Docker starts on boot.
 systemctl enable docker

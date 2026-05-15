@@ -47,6 +47,9 @@ jobs:
       platform: ${{ matrix.platform }}
       flavor:   ${{ matrix.flavor }}
       start_stage: "1"
+      reuse_previous_artifacts: false
+      reuse_binpkg_bundle: false
+      reuse_source_run_id: ""
       x64_artifact_formats: ${{ matrix.platform != 'x64' && 'img' || (matrix.flavor == 'debug' && 'vdi img' || (github.event_name == 'workflow_dispatch' && inputs.x64_artifact_formats || 'iso img')) }}
     secrets: inherit
 

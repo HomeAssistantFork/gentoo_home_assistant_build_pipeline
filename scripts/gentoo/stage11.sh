@@ -290,7 +290,9 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
-dracut --force --add 'dmsquash-live pollcdrom' --kver '${KERNEL_VERSION}' '/boot/${ISO_INITRAMFS_NAME}'
+  # dmsquash-live explicitly declines host-only images upstream, so the ISO
+  # initramfs must be built as a generic live image.
+  dracut --force --no-hostonly --add 'dmsquash-live pollcdrom' --kver '${KERNEL_VERSION}' '/boot/${ISO_INITRAMFS_NAME}'
 "
     [[ -f "$ISO_INITRAMFS_PATH" ]] || die "ISO initramfs not found: $ISO_INITRAMFS_PATH"
 
