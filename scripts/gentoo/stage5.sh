@@ -164,13 +164,15 @@ emerge_args=(--ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace)
 if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
 	export MAKEOPTS="-j1"
 	export GOMAXPROCS=1
-	# ARM stage5 still needs the local overlay package built from source, but its
-	# heavy dependencies should stay on the binpkg path to avoid qemu-user thread
-	# explosions.
+	# Portage still keeps the target atom in the resolver for "--onlydeps", so
+	# "--usepkgonly --onlydeps sys-apps/gentooha-compat" fails because our local
+	# overlay package has no upstream binpkg. Install the concrete dependency set
+	# on the binary-only path, then install the overlay package itself with
+	# --nodeps to avoid qemu-user source builds of Docker and friends.
 	EMERGE_DEFAULT_OPTS="" emerge \
 		--ask=n --getbinpkg --usepkgonly --binpkg-respect-use=y \
-		--onlydeps --noreplace --jobs=1 --load-average=1 \
-		sys-apps/gentooha-compat
+		--noreplace --jobs=1 --load-average=1 \
+		app-containers/docker sys-apps/systemd
 	EMERGE_DEFAULT_OPTS="" emerge \
 		--ask=n --noreplace --oneshot --nodeps --jobs=1 --load-average=1 \
 		sys-apps/gentooha-compat
