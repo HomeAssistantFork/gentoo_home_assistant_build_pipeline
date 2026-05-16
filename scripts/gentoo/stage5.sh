@@ -164,18 +164,17 @@ emerge_args=(--ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace)
 if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
 	export MAKEOPTS="-j1"
 	export GOMAXPROCS=1
-	# Portage still keeps the target atom in the resolver for "--onlydeps", so
-	# "--usepkgonly --onlydeps sys-apps/gentooha-compat" fails because our local
-	# overlay package has no upstream binpkg. Install the concrete dependency set
-	# on the binary-only path, then install the overlay package itself with
-	# --nodeps to avoid qemu-user source builds of Docker and friends.
-	EMERGE_DEFAULT_OPTS="" emerge \
-		--ask=n --getbinpkg --usepkgonly --binpkg-respect-use=y \
-		--noreplace --jobs=1 --load-average=1 \
-		app-containers/docker sys-apps/systemd
-	EMERGE_DEFAULT_OPTS="" emerge \
-		--ask=n --noreplace --oneshot --nodeps --jobs=1 --load-average=1 \
-		sys-apps/gentooha-compat
+	# stage4 already installed the prerequisite dependency set into the stage4
+	# rootfs artifact. On ARM we only need the lightweight overlay package here,
+	# and asking Portage for dependency binpkgs reopens missing-binpkg failures
+	# before it ever reaches the local ebuild.
+	if [[ -n "$(portageq match / sys-apps/gentooha-compat 2>/dev/null || true)" ]]; then
+		echo "[stage5] gentooha-compat already installed; skipping reinstall"
+	else
+		EMERGE_DEFAULT_OPTS="" emerge \
+			--ask=n --oneshot --nodeps --jobs=1 --load-average=1 \
+			sys-apps/gentooha-compat
+	fi
 	systemctl enable ha-os-release-sync.service
 	exit 0
 fi
