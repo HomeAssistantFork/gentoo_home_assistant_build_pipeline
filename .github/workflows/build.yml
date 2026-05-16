@@ -12,9 +12,9 @@ on:
       flavor:
         description: Build flavor
         required: true
-        default: debug
+        default: live
         type: choice
-        options: [live, installer, debug]
+        options: [live, debug, installer]
       reuse_previous_artifacts:
         description: Reuse matching stage artifacts from prior completed runs when available
         required: false
@@ -29,6 +29,11 @@ on:
         description: Specific workflow run ID to reuse artifacts from
         required: false
         default: ""
+        type: string
+      x64_artifact_formats:
+        description: X64 artifact formats to build (space/comma separated)
+        required: false
+        default: "iso img"
         type: string
 
   workflow_call:
@@ -59,6 +64,10 @@ on:
         required: false
         type: string
         default: ""
+      x64_artifact_formats:
+        required: false
+        type: string
+        default: "iso img"
 
 permissions:
   contents: read
@@ -67,6 +76,7 @@ permissions:
 env:
   PLATFORM: ${{ inputs.platform }}
   FLAVOR: ${{ inputs.flavor }}
+  X64_ARTIFACT_FORMATS: ${{ inputs.x64_artifact_formats }}
   REUSE_PREVIOUS_ARTIFACTS: ${{ inputs.reuse_previous_artifacts }}
   REUSE_BINPKG_BUNDLE: ${{ inputs.reuse_binpkg_bundle }}
   REUSE_SOURCE_RUN_ID: ${{ inputs.reuse_source_run_id }}
@@ -111,7 +121,7 @@ jobs:
       - name: Run stage1 only
         if: ${{ steps.reuse_stage1.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=1 END_STAGE=1 CLEAN_STATE=true bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=1 END_STAGE=1 CLEAN_STATE=true bash build.sh --non-interactive
 
       - name: Pack rootfs after stage1
         if: ${{ steps.reuse_stage1.outputs.cache_hit != 'true' }}
@@ -181,7 +191,7 @@ jobs:
       - name: Run stage2 only
         if: ${{ steps.reuse_stage2.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=2 END_STAGE=2 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=2 END_STAGE=2 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage2
         if: ${{ steps.reuse_stage2.outputs.cache_hit != 'true' }}
@@ -269,7 +279,7 @@ jobs:
       - name: Run stage3 only
         if: ${{ steps.reuse_stage3.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=3 END_STAGE=3 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=3 END_STAGE=3 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage3
         if: ${{ steps.reuse_stage3.outputs.cache_hit != 'true' }}
@@ -357,7 +367,7 @@ jobs:
       - name: Run stage4 only
         if: ${{ steps.reuse_stage4.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=4 END_STAGE=4 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=4 END_STAGE=4 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage4
         if: ${{ steps.reuse_stage4.outputs.cache_hit != 'true' }}
@@ -445,7 +455,7 @@ jobs:
       - name: Run stage5 only
         if: ${{ steps.reuse_stage5.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=5 END_STAGE=5 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=5 END_STAGE=5 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage5
         if: ${{ steps.reuse_stage5.outputs.cache_hit != 'true' }}
@@ -547,7 +557,7 @@ jobs:
       - name: Run stage6 only
         if: ${{ steps.reuse_stage6.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=6 END_STAGE=6 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=6 END_STAGE=6 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage6
         if: ${{ steps.reuse_stage6.outputs.cache_hit != 'true' }}
@@ -651,7 +661,7 @@ jobs:
       - name: Run stage7 only
         if: ${{ steps.reuse_stage7.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=7 END_STAGE=7 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=7 END_STAGE=7 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage7
         if: ${{ steps.reuse_stage7.outputs.cache_hit != 'true' }}
@@ -716,7 +726,7 @@ jobs:
       - name: Run stage8 only
         if: ${{ steps.reuse_stage8.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=8 END_STAGE=8 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=8 END_STAGE=8 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage8
         if: ${{ steps.reuse_stage8.outputs.cache_hit != 'true' }}
@@ -781,7 +791,7 @@ jobs:
       - name: Run stage9 only
         if: ${{ steps.reuse_stage9.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=9 END_STAGE=9 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=9 END_STAGE=9 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage9
         if: ${{ steps.reuse_stage9.outputs.cache_hit != 'true' }}
@@ -846,7 +856,7 @@ jobs:
       - name: Run stage10 only
         if: ${{ steps.reuse_stage10.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=10 END_STAGE=10 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=10 END_STAGE=10 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage10
         if: ${{ steps.reuse_stage10.outputs.cache_hit != 'true' }}
@@ -913,7 +923,7 @@ jobs:
       - name: Run stage11 only
         if: ${{ steps.reuse_stage11.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=11 END_STAGE=11 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=11 END_STAGE=11 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage11
         if: ${{ steps.reuse_stage11.outputs.cache_hit != 'true' }}
@@ -978,21 +988,22 @@ jobs:
       - name: Run stage12 only
         if: ${{ steps.reuse_stage12.outputs.cache_hit != 'true' }}
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=12 END_STAGE=12 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=12 END_STAGE=12 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Pack rootfs after stage12
         if: ${{ steps.reuse_stage12.outputs.cache_hit != 'true' }}
         run: |
           sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash scripts/gentoo/rootfs_pack.sh /tmp/rootfs-stage12.tar.zst
 
-      - name: Archive stage12 binpkgs
+      - name: Stage stage12 binpkg payloads
         if: ${{ steps.reuse_stage12.outputs.cache_hit != 'true' }}
         run: |
           sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" bash -lc 'set -euo pipefail
           if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
             tar -C /mnt/gentoo/var/cache -czf /tmp/binpkgs-${PLATFORM}-${FLAVOR}.tar.gz binpkgs
+            tar --zstd -C /mnt/gentoo/var/cache -cf /tmp/gentooha-binhost-${PLATFORM}-${FLAVOR}.tar.zst binpkgs
           else
-            echo "No /mnt/gentoo/var/cache/binpkgs directory found; skipping binpkg archive"
+            echo "No /mnt/gentoo/var/cache/binpkgs directory found; skipping binpkg payload staging"
           fi'
 
       - name: Upload rootfs stage12 artifact
@@ -1006,12 +1017,13 @@ jobs:
           retention-days: 14
           overwrite: true
 
-      - name: Upload binpkg cache bundle
+      - name: Upload binpkg payloads
         uses: actions/upload-artifact@v4
         with:
           name: gentooha-binpkgs-${{ inputs.platform }}-${{ inputs.flavor }}
           path: |
             /tmp/binpkgs-${{ inputs.platform }}-${{ inputs.flavor }}.tar.gz
+            /tmp/gentooha-binhost-${{ inputs.platform }}-${{ inputs.flavor }}.tar.zst
           if-no-files-found: warn
           retention-days: 14
           overwrite: true
@@ -1050,7 +1062,7 @@ jobs:
 
       - name: Run stage13 only
         run: |
-          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" START_STAGE=13 END_STAGE=13 CLEAN_STATE=false bash build.sh --non-interactive
+          sudo env PLATFORM="$PLATFORM" FLAVOR="$FLAVOR" X64_ARTIFACT_FORMATS="$X64_ARTIFACT_FORMATS" START_STAGE=13 END_STAGE=13 CLEAN_STATE=false bash build.sh --non-interactive
 
       - name: Upload final build artifact
         uses: actions/upload-artifact@v4

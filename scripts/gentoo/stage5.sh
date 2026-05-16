@@ -33,6 +33,16 @@ case "${ARCH:-amd64}" in
 	*) PORTAGE_ARCH="${ARCH:-amd64}" ;;
 esac
 
+BINREPO_SYNC_URI='https://distfiles.gentoo.org/releases/amd64/binpackages/23.0/x86-64'
+case "${PORTAGE_ARCH}" in
+	arm)
+		BINREPO_SYNC_URI='https://distfiles.gentoo.org/releases/arm/binpackages/23.0/armv7a_hardfp'
+		;;
+	arm64)
+		BINREPO_SYNC_URI='https://distfiles.gentoo.org/releases/arm64/binpackages/23.0/aarch64'
+		;;
+esac
+
 # Stage artifacts may not retain a populated Gentoo tree or /var/tmp.
 mkdir -p /var/tmp /var/db/repos/gentoo /var/db/repos/gentooha /etc/portage/repos.conf
 if [[ ! -d /var/db/repos/gentoo/profiles ]]; then
@@ -109,16 +119,16 @@ PY
 fi
 
 if [[ -f /etc/portage/make.conf ]]; then
-	sed -i -E '/^PORTAGE_BACKGROUND=|^NOCOLOR=|^FEATURES=|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
+	sed -i -E '/^PORTAGE_BACKGROUND=|^NOCOLOR=|^FEATURES=|^EMERGE_DEFAULT_OPTS=|^PORTAGE_BINHOST=|^PORTAGE_GPG_DIR=/d' /etc/portage/make.conf || true
 fi
 printf 'PORTAGE_BACKGROUND="1"\n' >> /etc/portage/make.conf
 printf 'NOCOLOR="true"\n' >> /etc/portage/make.conf
-printf 'FEATURES="-pty"\n' >> /etc/portage/make.conf
+printf 'FEATURES="getbinpkg -pty"\n' >> /etc/portage/make.conf
 printf 'PORTAGE_BINHOST="https://packages.gentoo.org/packages/index.gpkg.tar"\n' >> /etc/portage/make.conf
-printf 'PORTAGE_GPG_DIR="/etc/portage/gnupg"\n' >> /etc/portage/make.conf
 
 mkdir -p /etc/portage/binrepos.conf
 if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
+	sed -i -E 's|^sync-uri *=.*|sync-uri = '"$BINREPO_SYNC_URI"'|' /etc/portage/binrepos.conf/gentoo.conf
 	sed -i -E 's|^location *=.*|location = /var/cache/binhost/gentoo|' /etc/portage/binrepos.conf/gentoo.conf
 	sed -i -E 's|^priority *=.*|priority = 1|' /etc/portage/binrepos.conf/gentoo.conf
 	if grep -q '^verify-signature' /etc/portage/binrepos.conf/gentoo.conf; then
@@ -127,24 +137,15 @@ if [[ -f /etc/portage/binrepos.conf/gentoo.conf ]]; then
 		printf 'verify-signature = false\n' >> /etc/portage/binrepos.conf/gentoo.conf
 	fi
 else
-	cat >/etc/portage/binrepos.conf/gentoo.conf <<'EOF'
+	cat >/etc/portage/binrepos.conf/gentoo.conf <<EOF
 [gentoo]
 priority = 1
+sync-uri = $BINREPO_SYNC_URI
 location = /var/cache/binhost/gentoo
 verify-signature = false
 EOF
 fi
-
-mkdir -p /etc/portage/gnupg
-chown -R root:root /etc/portage/gnupg
-chmod 700 /etc/portage/gnupg
-if command -v getuto >/dev/null 2>&1; then
-	echo "[stage5] Initializing Gentoo binpkg trust"
-	getuto || true
-fi
-chown -R root:root /etc/portage/gnupg
-find /etc/portage/gnupg -type d -exec chmod 700 {} +
-find /etc/portage/gnupg -type f -exec chmod 600 {} +
+rm -rf /etc/portage/gnupg
 
 mkdir -p /etc/portage/package.accept_keywords
 cat >/etc/portage/package.accept_keywords/gentooha <<EOF
@@ -159,7 +160,25 @@ EOF
 # gentooha-compat is pulled as a dep of gentooha-alpha in stage4, but emerge
 # --noreplace makes this a no-op if already installed so the stage is safe to
 # run standalone when skipping stage4.
-EMERGE_DEFAULT_OPTS="" emerge --ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace sys-apps/gentooha-compat
+emerge_args=(--ask=n --getbinpkg --usepkg --binpkg-respect-use=y --noreplace)
+if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
+	export MAKEOPTS="-j1"
+	export GOMAXPROCS=1
+	# stage4 already installed the prerequisite dependency set into the stage4
+	# rootfs artifact. On ARM we only need the lightweight overlay package here,
+	# and asking Portage for dependency binpkgs reopens missing-binpkg failures
+	# before it ever reaches the local ebuild.
+	if [[ -n "$(portageq match / sys-apps/gentooha-compat 2>/dev/null || true)" ]]; then
+		echo "[stage5] gentooha-compat already installed; skipping reinstall"
+	else
+		EMERGE_DEFAULT_OPTS="" emerge \
+			--ask=n --oneshot --nodeps --jobs=1 --load-average=1 \
+			sys-apps/gentooha-compat
+	fi
+	systemctl enable ha-os-release-sync.service
+	exit 0
+fi
+EMERGE_DEFAULT_OPTS="" emerge "${emerge_args[@]}" sys-apps/gentooha-compat
 
 systemctl enable ha-os-release-sync.service
 CHROOT_STAGE5

@@ -22,7 +22,7 @@ on:
       x64_formats:
         description: X64 artifact formats (space/comma separated)
         required: false
-        default: vdi
+        default: vdi iso img
       publish_release:
         description: Publish build artifacts to a GitHub Release
         required: false
@@ -36,7 +36,7 @@ permissions:
 env:
   PLATFORM: ${{ github.event_name == 'workflow_dispatch' && inputs.platform || 'x64' }}
   FLAVOR: ${{ github.event_name == 'workflow_dispatch' && inputs.flavor || 'debug' }}
-  X64_ARTIFACT_FORMATS: ${{ github.event_name == 'workflow_dispatch' && inputs.x64_formats || 'vdi' }}
+  X64_ARTIFACT_FORMATS: ${{ github.event_name == 'workflow_dispatch' && inputs.x64_formats || 'vdi iso img' }}
   BUILD_UML_KERNEL: false
 
 jobs:
@@ -89,6 +89,7 @@ jobs:
           cp -f /var/lib/ha-gentoo-hybrid/artifacts/gentooha-'$env:PLATFORM'-'$env:FLAVOR'.* "\$staging"/
           if [[ -d /mnt/gentoo/var/cache/binpkgs ]]; then
             tar -C /mnt/gentoo/var/cache -czf "\$staging/binpkgs-'$env:PLATFORM'-'$env:FLAVOR'.tar.gz" binpkgs
+            tar --zstd -C /mnt/gentoo/var/cache -cf "\$staging/gentooha-binhost-'$env:PLATFORM'-'$env:FLAVOR'.tar.zst" binpkgs
           fi
           "@
 
@@ -99,6 +100,7 @@ jobs:
           path: |
             .trusted-release-artifacts/gentooha-${{ env.PLATFORM }}-${{ env.FLAVOR }}.*
             .trusted-release-artifacts/binpkgs-${{ env.PLATFORM }}-${{ env.FLAVOR }}.tar.gz
+            .trusted-release-artifacts/gentooha-binhost-${{ env.PLATFORM }}-${{ env.FLAVOR }}.tar.zst
           if-no-files-found: error
           retention-days: 14
           overwrite: true
@@ -127,3 +129,4 @@ jobs:
           files: |
             /tmp/release-assets/gentooha-${{ env.PLATFORM }}-${{ env.FLAVOR }}.*
             /tmp/release-assets/binpkgs-${{ env.PLATFORM }}-${{ env.FLAVOR }}.tar.gz
+            /tmp/release-assets/gentooha-binhost-${{ env.PLATFORM }}-${{ env.FLAVOR }}.tar.zst

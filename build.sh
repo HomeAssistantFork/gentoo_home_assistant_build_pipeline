@@ -58,7 +58,7 @@ while [[ $# -gt 0 ]]; do
       cat <<'EOF'
 Usage: bash build.sh [--non-interactive]
                     [--platform x64|pi3|pi4|pizero2|bbb|pbv2]
-                    [--flavor live|installer|debug]
+                    [--flavor live|debug|installer]
                     [--x64-formats vhd|vdi|iso|img[,...]]
                     [--build-uml-kernel true|false]
                     [--start-stage 1-12]
@@ -102,7 +102,15 @@ if [[ "$_ENV" == "unsupported-unix" || "$_ENV" == "unknown" ]]; then
 fi
 
 VALID_PLATFORMS=(x64 pi3 pi4 pizero2 bbb pbv2)
-VALID_FLAVORS=(live installer debug)
+VALID_FLAVORS=(live debug installer)
+
+canonicalize_flavor() {
+  case "${1:-live}" in
+    installer) printf 'live\n' ;;
+    live|debug) printf '%s\n' "$1" ;;
+    *) return 1 ;;
+  esac
+}
 
 # ── Persistent config: load saved defaults ─────────────────────────────────
 STATE_ROOT="${STATE_ROOT:-/var/lib/ha-gentoo-hybrid/state}"
@@ -188,7 +196,8 @@ EOF
 
 if $NON_INTERACTIVE; then
   PLATFORM="${CLI_PLATFORM:-${PLATFORM:-${_saved_platform:-x64}}}"
-  FLAVOR="${CLI_FLAVOR:-${FLAVOR:-${_saved_flavor:-installer}}}"
+  FLAVOR="${CLI_FLAVOR:-${FLAVOR:-${_saved_flavor:-live}}}"
+  FLAVOR="$(canonicalize_flavor "$FLAVOR")"
   X64_ARTIFACT_FORMATS="${CLI_X64_ARTIFACT_FORMATS:-${X64_ARTIFACT_FORMATS:-${X64_ARTIFACT_FORMAT:-${_saved_x64_artifact_format:-vhd}}}}"
   BUILD_UML_KERNEL="${CLI_BUILD_UML_KERNEL:-${BUILD_UML_KERNEL:-${_saved_build_uml_kernel:-false}}}"
   START_STAGE="${CLI_START_STAGE:-${START_STAGE:-${_default_start_stage}}}"
@@ -218,26 +227,31 @@ else
 
   echo ""
   echo "Flavors:"
-  echo "  live       - Bootable live system"
-  echo "  installer  - Installs to disk on first boot"
-  echo "  debug      - Verbose boot diagnostics on console"
+  echo "  live       - Unified release image (replaces prior live + installer split)"
+  echo "  debug      - Verbose boot diagnostics on console; BIOS-oriented disk boot"
+  echo "  installer  - Compatibility alias for live"
   echo ""
-  _flav_default="${_saved_flavor:-installer}"
+  _flav_default="$(canonicalize_flavor "${_saved_flavor:-live}")"
   while true; do
     read -rp "Flavor [${_flav_default}]: " FLAVOR
     FLAVOR="${FLAVOR:-${_flav_default}}"
     if [[ " ${VALID_FLAVORS[*]} " =~ " ${FLAVOR} " ]]; then break; fi
     echo "Invalid flavor. Choose from: ${VALID_FLAVORS[*]}"
   done
+  FLAVOR="$(canonicalize_flavor "$FLAVOR")"
 
-  X64_ARTIFACT_FORMATS="${_saved_x64_artifact_format:-vhd}"
+  if [[ "$FLAVOR" == "debug" ]]; then
+    X64_ARTIFACT_FORMATS="${_saved_x64_artifact_format:-vdi img}"
+  else
+    X64_ARTIFACT_FORMATS="${_saved_x64_artifact_format:-iso img}"
+  fi
   BUILD_UML_KERNEL="${_saved_build_uml_kernel:-false}"
   if [[ "$PLATFORM" == "x64" ]]; then
     echo ""
     echo "x64 artifact formats:"
-    echo "  vhd   - Hyper-V / VirtualBox disk image"
+    echo "  vhd   - Hyper-V disk image"
     echo "  vdi   - VirtualBox VDI"
-    echo "  iso   - bootable ISO"
+    echo "  iso   - bootable release ISO"
     echo "  img   - raw disk image"
     echo "  Enter one or more, comma- or space-delimited."
     echo "  Examples: vhd   |   vhd,iso   |   vdi img"

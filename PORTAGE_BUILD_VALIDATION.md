@@ -8,7 +8,7 @@ The GentooHA build now uses **Portage emerges** instead of manual shell-based in
 - **Reproducibility**: Dependencies managed by Portage metadata
 - **Clarity**: All installation logic in ebuilds (can be versioned, audited)
 - **Extensibility**: New gentooha packages easily added to overlay
-- **Validation**: Kernel features enforced via gentooha-kernel-config-alpha package
+- **Validation**: Kernel features enforced and shipped through a Portage-installed gentooha-kernel-alpha package
 
 ---
 
@@ -20,7 +20,7 @@ The GentooHA build now uses **Portage emerges** instead of manual shell-based in
 | **3** | Portage tree sync, overlay registration | **Copies overlay to `/var/db/repos/gentooha`, registers in `/etc/portage/repos.conf/gentooha.conf`** |
 | **4** | **Gentooha meta-package emerge** | **`emerge gentooha/gentooha-alpha` resolves all sub-packages** |
 | **5** | Compatibility layer, HA stack | Uses `sys-apps/gentooha-compat` ebuild |
-| **6** | **Kernel build with feature validation** | **Reads `/usr/share/gentooha-kernel-config-alpha/required-flags.conf` (150+ flags)** |
+| **6** | **Kernel package build with feature validation** | **`emerge sys-kernel/gentooha-kernel-alpha` builds and installs dual kernel tracks** |
 | **7** | Bootloader (GRUB) | From gentooha-alpha meta-package deps |
 | **8** | Supervisor + os-agent | **Live ebuilds `sys-apps/gentooha-supervisor-9999` and `sys-apps/gentooha-os-agent-9999`** |
 | **9-11** | Docker, AppArmor, systemd services | From gentooha-alpha deps + stage scripts |
@@ -49,6 +49,8 @@ overlay/
 │   └── gentooha-os-agent/
 │       └── gentooha-os-agent-9999.ebuild   # Live ebuild (Go build)
 └── sys-kernel/
+  ├── gentooha-kernel-alpha/
+  │   └── gentooha-kernel-alpha-1.0.ebuild         # Dual-track kernel package
     └── gentooha-kernel-config-alpha/
         └── gentooha-kernel-config-alpha-1.0.ebuild  # Kernel feature manifest
 ```
@@ -75,13 +77,27 @@ Aggregates all HA stack dependencies into a single `emerge gentooha/gentooha-alp
 - `net-firewall/iptables`
 - `app-misc/jq`, `net-misc/curl`, `dev-vcs/git`, `dev-lang/go`
 
+### gentooha-kernel-alpha
+**Purpose**: Portage-managed dual-track kernel build for GentooHA
+
+**Builds and installs:**
+- `vmlinuz-<release>-compat`
+- `vmlinuz-<release>-modern`
+- `/boot/config-compat` and `/boot/config-modern`
+- Matching `/lib/modules/<release>` trees
+- ARM DTBs where required for `.img` boot media
+
+**Binpkg result:**
+- Stage 6 emerges a real `sys-kernel/gentooha-kernel-alpha` package
+- Stage 12 can now emit a standalone kernel binary package alongside the rest of `@world`
+
 ### gentooha-kernel-config-alpha
-**Purpose**: Centralized kernel feature enforcement
+**Purpose**: Centralized kernel feature enforcement consumed by gentooha-kernel-alpha
 
 **Provides:**
 - `/usr/share/gentooha-kernel-config-alpha/required-flags.conf` (150+ kernel flags)
 
-**Applied by stage6:**
+**Applied by gentooha-kernel-alpha during stage6:**
 ```bash
 apply_ha_kernel_options() {
   local flag_file="/usr/share/gentooha-kernel-config-alpha/required-flags.conf"
@@ -164,7 +180,7 @@ Clears: /var/lib/ha-gentoo-hybrid/state/stage*.done
 ### build.sh (Linux)
 **Stage execution:**
 - `START_STAGE=3 END_STAGE=4` runs Portage registration + meta-package emerge
-- `START_STAGE=6 END_STAGE=6` validates kernel (reads required-flags.conf)
+- `START_STAGE=6 END_STAGE=6` emerges the kernel package and validates required kernel flags
 - `START_STAGE=1 END_STAGE=13` full build with all 13 stages
 
 ---
@@ -188,9 +204,11 @@ auto-sync = no
 ✅ Portage resolves and installs all 5 ebuilds + transitive deps
 ✅ Enables systemd units: `docker`, `ha-os-release-sync`
 
-### Stage 6 (Kernel Validation)
+### Stage 6 (Kernel Package Build)
+✅ `emerge sys-kernel/gentooha-kernel-alpha` builds the kernel through Portage
 ✅ Kernel config reads `/usr/share/gentooha-kernel-config-alpha/required-flags.conf`
 ✅ Applies 150+ CONFIG flags via `./scripts/config`
+✅ Installs kernel images, configs, modules, and DTBs into the target root
 ✅ Validates presence of:
   - Overlay filesystem (`CONFIG_OVERLAY_FS`)
   - BPF/eBPF (`CONFIG_BPF_SYSCALL`, `CONFIG_CGROUP_BPF`)

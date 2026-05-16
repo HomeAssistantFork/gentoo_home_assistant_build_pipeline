@@ -89,7 +89,9 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
-emerge --ask=n --noreplace sys-kernel/dracut
+# dracut's dmsquash-live module requires the device-mapper userspace tools
+# shipped by lvm2 in order to enable its dependent dm module.
+emerge --ask=n --noreplace sys-kernel/dracut sys-fs/lvm2
 "
 
 if [[ ! -f "$INITRAMFS_IMAGE" ]]; then
@@ -99,6 +101,25 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
+module_dir=''
+if [[ -d '/usr/lib/modules/${KERNEL_VERSION}' ]]; then
+  module_dir='/usr/lib/modules/${KERNEL_VERSION}'
+elif [[ -d '/lib/modules/${KERNEL_VERSION}' ]]; then
+  module_dir='/lib/modules/${KERNEL_VERSION}'
+else
+  echo 'Kernel modules directory not found for ${KERNEL_VERSION}' >&2
+  exit 1
+fi
+
+if [[ ! -f "\${module_dir}/modules.dep" ]]; then
+  depmod -a '${KERNEL_VERSION}'
+fi
+
+if [[ ! -f "\${module_dir}/modules.dep" ]]; then
+  echo 'modules.dep was not generated for ${KERNEL_VERSION}' >&2
+  exit 1
+fi
+
 dracut --force --kver '${KERNEL_VERSION}' '/boot/initramfs-${KERNEL_VERSION}.img'
 "
 fi
@@ -271,7 +292,9 @@ set -euo pipefail
 set +u
 source /etc/profile
 set -u
-dracut --force --add 'dmsquash-live pollcdrom' --kver '${KERNEL_VERSION}' '/boot/${ISO_INITRAMFS_NAME}'
+  # dmsquash-live explicitly declines host-only images upstream, so the ISO
+  # initramfs must be built as a generic live image.
+  dracut --force --no-hostonly --add 'dmsquash-live pollcdrom' --kver '${KERNEL_VERSION}' '/boot/${ISO_INITRAMFS_NAME}'
 "
     [[ -f "$ISO_INITRAMFS_PATH" ]] || die "ISO initramfs not found: $ISO_INITRAMFS_PATH"
 

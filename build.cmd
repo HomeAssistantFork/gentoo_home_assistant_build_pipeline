@@ -36,7 +36,8 @@ if not "%SAVED_PLATFORM%"=="" set "DEF_PLATFORM=%SAVED_PLATFORM%"
 if "%DEF_PLATFORM%"=="" set "DEF_PLATFORM=x64"
 
 if not "%SAVED_FLAVOR%"=="" set "DEF_FLAVOR=%SAVED_FLAVOR%"
-if "%DEF_FLAVOR%"=="" set "DEF_FLAVOR=installer"
+if "%DEF_FLAVOR%"=="" set "DEF_FLAVOR=live"
+if /I "%DEF_FLAVOR%"=="installer" set "DEF_FLAVOR=live"
 
 set "DEF_BINPKG=b"
 if /I "%SAVED_USE_BINPKG%"=="false" set "DEF_BINPKG=s"
@@ -78,9 +79,9 @@ goto ask_platform
 :platform_ok
 echo.
 echo Flavors:
-echo   live       - Bootable live system
-echo   installer  - Installs to disk on first boot
-echo   debug      - Verbose boot diagnostics on console
+echo   live       - Unified release image ^(replaces prior live + installer split^)
+echo   debug      - Verbose boot diagnostics on console; BIOS-oriented disk boot
+echo   installer  - Compatibility alias for live
 echo.
 
 :ask_flavor
@@ -94,9 +95,14 @@ echo Invalid flavor. Choose: live  installer  debug
 goto ask_flavor
 
 :flavor_ok
+if /I "%FLAVOR%"=="installer" set "FLAVOR=live"
 if /I "%PLATFORM%"=="x64" (
   echo.
-  if "%SAVED_X64_ARTIFACT_FORMAT%"=="" set "SAVED_X64_ARTIFACT_FORMAT=vhd"
+  if /I "%FLAVOR%"=="debug" (
+    if "%SAVED_X64_ARTIFACT_FORMAT%"=="" set "SAVED_X64_ARTIFACT_FORMAT=vdi img"
+  ) else (
+    if "%SAVED_X64_ARTIFACT_FORMAT%"=="" set "SAVED_X64_ARTIFACT_FORMAT=iso img"
+  )
   set "X64_ARTIFACT_FORMATS="
   set /P X64_ARTIFACT_FORMATS="Artifact formats (space/comma-delimited: vhd vdi iso img) [%SAVED_X64_ARTIFACT_FORMAT%]: "
   if "%X64_ARTIFACT_FORMATS%"=="" set "X64_ARTIFACT_FORMATS=%SAVED_X64_ARTIFACT_FORMAT%"

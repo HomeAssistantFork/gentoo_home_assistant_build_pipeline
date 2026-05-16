@@ -16,14 +16,43 @@ set +u
 source /etc/profile
 set -u
 
+latest_kernel_config=""
+if [[ -f /boot/config-modern ]]; then
+    latest_kernel_config=/boot/config-modern
+elif [[ -f /boot/config-compat ]]; then
+    latest_kernel_config=/boot/config-compat
+fi
+
+if [[ ! -e /usr/src/linux ]]; then
+    latest_kernel_src="$(find /usr/src -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | sort -V | tail -n 1)"
+    if [[ -n "$latest_kernel_src" ]]; then
+        ln -sfn "$latest_kernel_src" /usr/src/linux
+    fi
+fi
+
+if [[ -n "$latest_kernel_config" && -e /usr/src/linux ]]; then
+    cp -f "$latest_kernel_config" /usr/src/linux/.config
+fi
+
+if [[ -e /usr/src/linux ]]; then
+    export KERNEL_DIR=/usr/src/linux
+fi
+
+emerge_args=(--ask=n --noreplace)
+if [[ "${ARCH:-amd64}" == arm* || "${ARCH:-amd64}" == aarch64 ]]; then
+    export MAKEOPTS="-j1"
+    export GOMAXPROCS=1
+    emerge_args+=(--jobs=1 --load-average=1)
+fi
+
 # sys-apps/apparmor and net-misc/openssh are deps of gentooha-alpha (stage4).
 # Use --noreplace so this is a no-op on a full build; installs them on partial runs.
-emerge --ask=n --noreplace sys-apps/apparmor net-misc/openssh
+emerge "${emerge_args[@]}" sys-apps/apparmor net-misc/openssh
 
 # Ensure Docker CLI is present.
 if ! command -v docker &>/dev/null; then
-    emerge --ask=n --noreplace app-containers/docker-cli \
-        || emerge --ask=n --noreplace app-containers/moby-cli \
+    emerge "${emerge_args[@]}" app-containers/docker-cli \
+        || emerge "${emerge_args[@]}" app-containers/moby-cli \
         || true
 fi
 
